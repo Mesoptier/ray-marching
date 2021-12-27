@@ -1,22 +1,26 @@
 use std::sync::Arc;
 
-use vulkano::{app_info_from_cargo_toml, Version};
+use vulkano::{app_info_from_cargo_toml, swapchain, sync, Version};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage};
 use vulkano::device::{Device, Queue};
 use vulkano::device::DeviceExtensions;
 use vulkano::device::Features;
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType, QueueFamily};
-use vulkano::image::{AttachmentImage, ImageUsage, SwapchainImage};
+use vulkano::image::{AttachmentImage, ImageUsage, ImageViewAbstract, SwapchainImage};
 use vulkano::image::view::ImageView;
 use vulkano::instance::Instance;
-use vulkano::swapchain::{ColorSpace, FullscreenExclusive, PresentMode, Surface, SurfaceTransform, Swapchain};
+use vulkano::swapchain::{AcquireError, ColorSpace, FullscreenExclusive, PresentMode, Surface, SurfaceTransform, Swapchain, SwapchainCreationError};
+use vulkano::sync::{FlushError, GpuFuture};
 use vulkano_win::VkSurfaceBuild;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
+use crate::render_pass_triangle::RenderPassTriangle;
+
 /// Final render target (swap chain image)
-pub type FinalImageView = Arc<ImageView<SwapchainImage<Window>>>;
+pub(crate) type FinalImageView = Arc<ImageView<SwapchainImage<Window>>>;
 /// Other intermediate render targets
-pub type InterimImageView = Arc<ImageView<AttachmentImage>>;
+pub(crate) type InterimImageView = Arc<ImageView<AttachmentImage>>;
 
 pub(crate) struct Renderer {
     _instance: Arc<Instance>,
@@ -26,6 +30,10 @@ pub(crate) struct Renderer {
     swap_chain: Arc<Swapchain<Window>>,
     image_index: usize,
     final_views: Vec<FinalImageView>,
+    recreate_swap_chain: bool,
+    previous_frame_end: Option<Box<dyn GpuFuture>>,
+
+    render_pass: RenderPassTriangle,
 }
 
 impl Renderer {
@@ -65,6 +73,12 @@ impl Renderer {
         let (swap_chain, final_views) =
             Self::create_swap_chain(physical, surface.clone(), device.clone(), queue.clone());
 
+        let previous_frame_end = Some(sync::now(device.clone()).boxed());
+
+        // Create render pass
+        let image_format = final_views.first().unwrap().format();
+        let render_pass = RenderPassTriangle::new(queue.clone(), image_format);
+
         Self {
             _instance: instance,
             device,
@@ -73,6 +87,10 @@ impl Renderer {
             swap_chain,
             image_index: 0,
             final_views,
+            recreate_swap_chain: false,
+            previous_frame_end,
+
+            render_pass,
         }
     }
 
@@ -101,6 +119,7 @@ impl Renderer {
         (device, queue)
     }
 
+    /// Creates swap chain and swap chain images
     fn create_swap_chain(
         physical: PhysicalDevice,
         surface: Arc<Surface<Window>>,
@@ -135,5 +154,92 @@ impl Renderer {
             .collect::<Vec<_>>();
 
         (swap_chain, images)
+    }
+
+    fn recreate_swap_chain(&mut self) {
+        let dimensions: [u32; 2] = self.surface.window().inner_size().into();
+        let (new_swap_chain, new_images) =
+            match self.swap_chain.recreate().dimensions(dimensions).build() {
+                Ok(result) => result,
+                Err(SwapchainCreationError::UnsupportedDimensions) => {
+                    println!("{}", SwapchainCreationError::UnsupportedDimensions.to_string());
+                    return;
+                }
+                Err(e) => panic!("Failed to recreate swap chain: {:?}", e)
+            };
+
+        self.swap_chain = new_swap_chain;
+        self.final_views = new_images
+            .into_iter()
+            .map(|image| ImageView::new(image).unwrap())
+            .collect();
+
+        self.recreate_swap_chain = false;
+    }
+
+    fn start_frame(&mut self) -> Result<Box<dyn GpuFuture>, AcquireError> {
+        // Recreate swap chain if needed (i.e. after window resized, or swap chain is outdated)
+        if self.recreate_swap_chain {
+            self.recreate_swap_chain();
+        }
+
+        // Acquire next image in the swap chain
+        let (image_index, suboptimal, acquire_future) =
+            match swapchain::acquire_next_image(self.swap_chain.clone(), None) {
+                Ok(result) => result,
+                Err(AcquireError::OutOfDate) => {
+                    self.recreate_swap_chain = true;
+                    return Err(AcquireError::OutOfDate);
+                }
+                Err(e) => panic!("Failed to acquire next image: {:?}", e)
+            };
+        if suboptimal {
+            self.recreate_swap_chain = true;
+        }
+
+        self.image_index = image_index;
+
+        let future = self.previous_frame_end.take().unwrap().join(acquire_future);
+        Ok(future.boxed())
+    }
+
+    fn finish_frame(&mut self, after_future: Box<dyn GpuFuture>) {
+        let future = after_future
+            .then_swapchain_present(
+                self.queue.clone(),
+                self.swap_chain.clone(),
+                self.image_index,
+            )
+            .then_signal_fence_and_flush();
+
+        match future {
+            Ok(future) => {
+                self.previous_frame_end = Some(future.boxed());
+            }
+            Err(FlushError::OutOfDate) => {
+                self.recreate_swap_chain = true;
+                self.previous_frame_end = Some(sync::now(self.device.clone()).boxed());
+            }
+            Err(e) => {
+                println!("Failed to flush future: {:?}", e);
+                self.previous_frame_end = Some(sync::now(self.device.clone()).boxed());
+            }
+        }
+    }
+
+    // TODO: Should not live here?
+    pub(crate) fn render(&mut self) {
+        // Clean-up, to avoid memory issues
+        self.previous_frame_end.as_mut().unwrap().cleanup_finished();
+
+        let acquire_future = self.start_frame().unwrap();
+
+        let render_pass_future = self.render_pass
+            .render(acquire_future, self.final_views[self.image_index].clone())
+            .then_signal_fence_and_flush()
+            .unwrap()
+            .boxed();
+
+        self.finish_frame(render_pass_future);
     }
 }
