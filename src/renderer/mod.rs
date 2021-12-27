@@ -1,21 +1,30 @@
 use std::sync::Arc;
 
 use vulkano::{app_info_from_cargo_toml, swapchain, sync, Version};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage};
 use vulkano::device::{Device, Queue};
 use vulkano::device::DeviceExtensions;
 use vulkano::device::Features;
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType, QueueFamily};
-use vulkano::image::{AttachmentImage, ImageUsage, ImageViewAbstract, SwapchainImage};
+use vulkano::format::Format;
+use vulkano::image::{
+    AttachmentImage, ImageAccess, ImageUsage, ImageViewAbstract, SampleCount, SwapchainImage,
+};
 use vulkano::image::view::ImageView;
 use vulkano::instance::Instance;
-use vulkano::swapchain::{AcquireError, ColorSpace, FullscreenExclusive, PresentMode, Surface, SurfaceTransform, Swapchain, SwapchainCreationError};
+use vulkano::swapchain::{
+    AcquireError, ColorSpace, FullscreenExclusive, PresentMode, Surface, SurfaceTransform,
+    Swapchain, SwapchainCreationError,
+};
 use vulkano::sync::{FlushError, GpuFuture};
 use vulkano_win::VkSurfaceBuild;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
-use crate::render_pass_triangle::RenderPassTriangle;
+use crate::RayMarchingComputePipeline;
+use crate::renderer::render_pass_place_over_frame::RenderPassPlaceOverFrame;
+
+mod pixels_draw_pipeline;
+mod render_pass_place_over_frame;
 
 /// Final render target (swap chain image)
 pub(crate) type FinalImageView = Arc<ImageView<SwapchainImage<Window>>>;
@@ -30,10 +39,13 @@ pub(crate) struct Renderer {
     swap_chain: Arc<Swapchain<Window>>,
     image_index: usize,
     final_views: Vec<FinalImageView>,
+    interim_view: InterimImageView,
     recreate_swap_chain: bool,
     previous_frame_end: Option<Box<dyn GpuFuture>>,
 
-    render_pass: RenderPassTriangle,
+    render_pass: RenderPassPlaceOverFrame,
+    // TODO: This should probably not be in the Renderer
+    compute_pipeline: RayMarchingComputePipeline,
 }
 
 impl Renderer {
@@ -77,7 +89,26 @@ impl Renderer {
 
         // Create render pass
         let image_format = final_views.first().unwrap().format();
-        let render_pass = RenderPassTriangle::new(queue.clone(), image_format);
+        let image_dimensions = final_views.first().unwrap().image().dimensions();
+        let render_pass = RenderPassPlaceOverFrame::new(queue.clone(), image_format);
+
+        let compute_pipeline = RayMarchingComputePipeline::new(queue.clone());
+        let interim_view = ImageView::new(
+            AttachmentImage::multisampled_with_usage(
+                device.clone(),
+                image_dimensions.width_height(),
+                SampleCount::Sample1,
+                Format::R8G8B8A8_UNORM,
+                ImageUsage {
+                    sampled: true,
+                    input_attachment: true,
+                    storage: true,
+                    ..ImageUsage::none()
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
 
         Self {
             _instance: instance,
@@ -87,17 +118,25 @@ impl Renderer {
             swap_chain,
             image_index: 0,
             final_views,
+            interim_view,
             recreate_swap_chain: false,
             previous_frame_end,
 
             render_pass,
+            compute_pipeline,
         }
     }
 
     /// Creates vulkan device with required queue families and required extensions.
-    fn create_device(physical: PhysicalDevice, surface: Arc<Surface<Window>>) -> (Arc<Device>, Arc<Queue>) {
-        let queue_family = physical.queue_families()
-            .find(|&q: &QueueFamily| q.supports_graphics() && surface.is_supported(q).unwrap_or(false))
+    fn create_device(
+        physical: PhysicalDevice,
+        surface: Arc<Surface<Window>>,
+    ) -> (Arc<Device>, Arc<Queue>) {
+        let queue_family = physical
+            .queue_families()
+            .find(|&q: &QueueFamily| {
+                q.supports_graphics() && surface.is_supported(q).unwrap_or(false)
+            })
             .expect("failed to find a graphical queue family");
 
         let device_extensions = DeviceExtensions {
@@ -112,7 +151,8 @@ impl Renderer {
             &features,
             &physical.required_extensions().union(&device_extensions),
             [(queue_family, 0.5)].iter().cloned(),
-        ).expect("failed to create device");
+        )
+        .expect("failed to create device");
 
         let queue = queues.next().unwrap();
 
@@ -126,7 +166,8 @@ impl Renderer {
         device: Arc<Device>,
         queue: Arc<Queue>,
     ) -> (Arc<Swapchain<Window>>, Vec<FinalImageView>) {
-        let caps = surface.capabilities(physical)
+        let caps = surface
+            .capabilities(physical)
             .expect("failed to get surface capabilities");
         let dimensions: [u32; 2] = surface.window().inner_size().into();
         let alpha = caps.supported_composite_alpha.iter().next().unwrap();
@@ -162,10 +203,13 @@ impl Renderer {
             match self.swap_chain.recreate().dimensions(dimensions).build() {
                 Ok(result) => result,
                 Err(SwapchainCreationError::UnsupportedDimensions) => {
-                    println!("{}", SwapchainCreationError::UnsupportedDimensions.to_string());
+                    println!(
+                        "{}",
+                        SwapchainCreationError::UnsupportedDimensions.to_string()
+                    );
                     return;
                 }
-                Err(e) => panic!("Failed to recreate swap chain: {:?}", e)
+                Err(e) => panic!("Failed to recreate swap chain: {:?}", e),
             };
 
         self.swap_chain = new_swap_chain;
@@ -191,7 +235,7 @@ impl Renderer {
                     self.recreate_swap_chain = true;
                     return Err(AcquireError::OutOfDate);
                 }
-                Err(e) => panic!("Failed to acquire next image: {:?}", e)
+                Err(e) => panic!("Failed to acquire next image: {:?}", e),
             };
         if suboptimal {
             self.recreate_swap_chain = true;
@@ -234,8 +278,19 @@ impl Renderer {
 
         let acquire_future = self.start_frame().unwrap();
 
-        let render_pass_future = self.render_pass
-            .render(acquire_future, self.final_views[self.image_index].clone())
+        let target_image = self.interim_view.clone();
+        let compute_future = self
+            .compute_pipeline
+            .compute(target_image.clone())
+            .join(acquire_future);
+
+        let render_pass_future = self
+            .render_pass
+            .render(
+                compute_future,
+                target_image,
+                self.final_views[self.image_index].clone(),
+            )
             .then_signal_fence_and_flush()
             .unwrap()
             .boxed();

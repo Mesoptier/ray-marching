@@ -2,10 +2,11 @@ use std::time::{Duration, Instant};
 
 use winit::event_loop::EventLoop;
 
+use crate::ray_marching::ray_marching_compute_pipeline::RayMarchingComputePipeline;
 use crate::renderer::Renderer;
 
 mod renderer;
-mod render_pass_triangle;
+mod ray_marching;
 
 fn main() {
     let event_loop = EventLoop::new();
