@@ -1,15 +1,18 @@
 use std::sync::Arc;
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, SubpassContents};
 
-use crate::renderer::FinalImageView;
+use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, TypedBufferAccess};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, SubpassContents};
 use vulkano::device::Queue;
 use vulkano::format::Format;
+use vulkano::image::ImageAccess;
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
-use vulkano::pipeline::graphics::viewport::ViewportState;
+use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::GraphicsPipeline;
 use vulkano::render_pass::{Framebuffer, RenderPass, Subpass};
 use vulkano::sync::GpuFuture;
+
+use crate::renderer::FinalImageView;
 
 #[repr(C)]
 #[derive(Default, Debug, Clone)]
@@ -74,6 +77,8 @@ impl RenderPassTriangle {
     where
         F: GpuFuture + 'static,
     {
+        let dimensions = target_image.image().dimensions();
+
         // Create framebuffer
         let framebuffer = Framebuffer::start(self.render_pass.clone())
             .add(target_image)
@@ -98,7 +103,39 @@ impl RenderPassTriangle {
             )
             .unwrap();
 
-        // TODO: Execute commands
+        let vertex_buffer = CpuAccessibleBuffer::from_iter(
+            self.gfx_queue.device().clone(),
+            BufferUsage::all(),
+            false,
+            [
+                Vertex {
+                    position: [-0.5, -0.25],
+                },
+                Vertex {
+                    position: [0.0, 0.5],
+                },
+                Vertex {
+                    position: [0.25, -0.1],
+                },
+            ]
+            .iter()
+            .cloned(),
+        )
+        .unwrap();
+
+        let viewport = Viewport {
+            origin: [0.0, 0.0],
+            dimensions: [dimensions.width() as f32, dimensions.height() as f32],
+            depth_range: 0.0..1.0,
+        };
+
+        // Execute commands
+        builder
+            .set_viewport(0, [viewport])
+            .bind_pipeline_graphics(self.pipeline.clone())
+            .bind_vertex_buffers(0, vertex_buffer.clone())
+            .draw(vertex_buffer.len() as u32, 1, 0, 0)
+            .unwrap();
 
         // End render pass
         builder.end_render_pass().unwrap();
