@@ -1,8 +1,8 @@
 use std::sync::Arc;
+
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, TypedBufferAccess};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryCommandBuffer};
 use vulkano::descriptor_set::PersistentDescriptorSet;
-
 use vulkano::device::Queue;
 use vulkano::image::ImageAccess;
 use vulkano::pipeline::{ComputePipeline, Pipeline, PipelineBindPoint};
@@ -58,7 +58,7 @@ impl RayMarchingComputePipeline {
         // Describe layout
         let pipeline_layout = self.pipeline.layout();
         let desc_layout = pipeline_layout.descriptor_set_layouts().get(0).unwrap();
-        let mut desc_set_builder  = PersistentDescriptorSet::start(desc_layout.clone());
+        let mut desc_set_builder = PersistentDescriptorSet::start(desc_layout.clone());
         desc_set_builder
             .add_image(image.clone())
             .unwrap()
@@ -89,12 +89,7 @@ impl RayMarchingComputePipeline {
 
         // Build and execute commands
         let command_buffer = builder.build().unwrap();
-        let finished = command_buffer
-            .execute(self.gfx_queue.clone())
-            .unwrap();
-        finished
-            .then_signal_fence_and_flush()
-            .unwrap()
-            .boxed()
+        let finished = command_buffer.execute(self.gfx_queue.clone()).unwrap();
+        finished.then_signal_fence_and_flush().unwrap().boxed()
     }
 }

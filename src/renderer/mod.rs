@@ -181,7 +181,7 @@ impl Renderer {
             .sharing_mode(&queue)
             .composite_alpha(alpha)
             .transform(SurfaceTransform::Identity)
-            .present_mode(PresentMode::Fifo)
+            .present_mode(PresentMode::Immediate)
             .fullscreen_exclusive(FullscreenExclusive::Default)
             .clipped(true)
             .color_space(ColorSpace::SrgbNonLinear)
@@ -258,6 +258,12 @@ impl Renderer {
 
         match future {
             Ok(future) => {
+                // Prevent OutOfMemory error on Nvidia :(
+                // https://github.com/vulkano-rs/vulkano/issues/627
+                match future.wait(None) {
+                    Ok(x) => x,
+                    Err(err) => println!("{:?}", err),
+                }
                 self.previous_frame_end = Some(future.boxed());
             }
             Err(FlushError::OutOfDate) => {
