@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use crate::ray_marching::csg::builder::{CSGNodeBufferBuilder, CSGNodeDescriptor};
+use crate::ray_marching::csg::primitives::sphere::Sphere;
+use crate::ray_marching::csg::CSGNode;
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, TypedBufferAccess};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryCommandBuffer};
 use vulkano::descriptor_set::PersistentDescriptorSet;
@@ -7,6 +10,7 @@ use vulkano::device::Queue;
 use vulkano::image::ImageAccess;
 use vulkano::pipeline::{ComputePipeline, Pipeline, PipelineBindPoint};
 use vulkano::sync::GpuFuture;
+use crate::ray_marching::csg::operations::union::Union;
 
 use crate::renderer::InterimImageView;
 
@@ -20,7 +24,8 @@ mod cs {
 pub struct RayMarchingComputePipeline {
     gfx_queue: Arc<Queue>,
     pipeline: Arc<ComputePipeline>,
-    scene_buffer: Arc<CpuAccessibleBuffer<[u32]>>,
+    csg_nodes_buffer: Arc<CpuAccessibleBuffer<[CSGNodeDescriptor]>>,
+    csg_params_buffer: Arc<CpuAccessibleBuffer<[u32]>>,
 }
 
 impl RayMarchingComputePipeline {
@@ -37,19 +42,43 @@ impl RayMarchingComputePipeline {
             .unwrap()
         };
 
-        let scene_buffer = CpuAccessibleBuffer::from_iter(
+        let node = Union {
+            p1: Box::new((Sphere {
+                radius: 1.0,
+                center: [0.0, 0.0, 0.0],
+            })),
+            p2: Box::new((Sphere {
+                radius: 1.0,
+                center: [1.0, 0.0, 0.0],
+            })),
+        };
+        let mut builder = CSGNodeBufferBuilder::new();
+        node.foo(&mut builder);
+
+        println!("{:?}", builder.nodes);
+        println!("{:?}", builder.params);
+
+        let csg_nodes_buffer = CpuAccessibleBuffer::from_iter(
             gfx_queue.device().clone(),
             BufferUsage::all(),
             false,
-            // Single sphere with radius 1 positioned at (0, 0, 0)
-            [0.0f32.to_bits(), 0.0f32.to_bits(), 0.0f32.to_bits(), 1.0f32.to_bits()].into_iter(),
+            builder.nodes.into_iter(),
+        )
+        .unwrap();
+
+        let csg_params_buffer = CpuAccessibleBuffer::from_iter(
+            gfx_queue.device().clone(),
+            BufferUsage::all(),
+            false,
+            builder.params.into_iter(),
         )
         .unwrap();
 
         Self {
             gfx_queue,
             pipeline,
-            scene_buffer,
+            csg_nodes_buffer,
+            csg_params_buffer,
         }
     }
 
@@ -63,14 +92,16 @@ impl RayMarchingComputePipeline {
         desc_set_builder
             .add_image(image.clone())
             .unwrap()
-            .add_buffer(self.scene_buffer.clone())
+            .add_buffer(self.csg_nodes_buffer.clone())
+            .unwrap()
+            .add_buffer(self.csg_params_buffer.clone())
             .unwrap();
         let set = desc_set_builder.build().unwrap();
 
         let push_constants = cs::ty::PushConstants {
             min_dist: 0.001f32,
             max_dist: 10f32,
-            scene_size: self.scene_buffer.len() as u32,
+            node_count: self.csg_nodes_buffer.len() as u32,
             t,
         };
 
