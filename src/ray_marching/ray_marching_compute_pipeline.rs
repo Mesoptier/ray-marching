@@ -41,7 +41,8 @@ impl RayMarchingComputePipeline {
             gfx_queue.device().clone(),
             BufferUsage::all(),
             false,
-            [1.0f32.to_bits(); 4].into_iter(),
+            // Single sphere with radius 1 positioned at (0, 0, 0)
+            [0.0f32.to_bits(), 0.0f32.to_bits(), 0.0f32.to_bits(), 1.0f32.to_bits()].into_iter(),
         )
         .unwrap();
 

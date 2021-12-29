@@ -72,8 +72,16 @@ vec3 ray_march(in vec3 ro, in vec3 rd) {
 }
 
 void main() {
-    vec3 ro = vec3(gl_GlobalInvocationID.xy / 100.0, -5.0);
-    vec3 rd = vec3(0.0, 0.0, 1.0);
+    vec2 img_dims = vec2(imageSize(img));
+    vec2 uv = vec2(
+        (gl_GlobalInvocationID.x - img_dims.x / 2.0) / img_dims.x * 2.0,
+        (gl_GlobalInvocationID.y - img_dims.y / 2.0) / img_dims.x  * 2.0
+    );
+
+    vec3 camera_position = vec3(0.0, 0.0, -5.0);
+
+    vec3 ro = camera_position;
+    vec3 rd = vec3(uv, 1.0);
 
     vec4 write_color = vec4(ray_march(ro, rd), 1.0);
     imageStore(img, ivec2(gl_GlobalInvocationID.xy), write_color);
