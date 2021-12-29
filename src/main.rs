@@ -12,6 +12,8 @@ fn main() {
     let event_loop = EventLoop::new();
     let mut renderer = Renderer::new(&event_loop);
 
+    let start_time = Instant::now();
+
     event_loop.run(move |event, _, control_flow| {
         use winit::event::*;
         use winit::event_loop::ControlFlow;
@@ -24,7 +26,8 @@ fn main() {
                 *control_flow = ControlFlow::Exit;
             }
             Event::MainEventsCleared => {
-                renderer.render();
+                let running_time = Instant::now() - start_time;
+                renderer.render(running_time.as_secs_f32());
             }
             _ => {}
         }

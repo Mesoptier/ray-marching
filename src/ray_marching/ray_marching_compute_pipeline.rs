@@ -53,7 +53,7 @@ impl RayMarchingComputePipeline {
         }
     }
 
-    pub fn compute(&mut self, image: InterimImageView) -> Box<dyn GpuFuture> {
+    pub fn compute(&mut self, image: InterimImageView, t: f32) -> Box<dyn GpuFuture> {
         let dimensions = image.image().dimensions().width_height();
 
         // Describe layout
@@ -71,6 +71,7 @@ impl RayMarchingComputePipeline {
             min_dist: 0.001f32,
             max_dist: 10f32,
             scene_size: self.scene_buffer.len() as u32,
+            t,
         };
 
         // Build primary command buffer

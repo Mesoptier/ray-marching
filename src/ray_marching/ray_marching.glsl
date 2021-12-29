@@ -14,6 +14,7 @@ layout(push_constant) uniform PushConstants {
     float min_dist;
     float max_dist;
     uint scene_size;
+    float t;
 } push_constants;
 
 float sdf_scene(in vec3 p) {
@@ -78,7 +79,7 @@ vec3 ray_march(in vec3 ro, in vec3 rd) {
 
             float diffuse_intensity = max(0.0, dot(normal, direction_to_light));
 
-            return vec3(1.0, 0.0, 0.0) * diffuse_intensity;
+            return vec3(sin(push_constants.t), -sin(push_constants.t), 0.0) * diffuse_intensity;
         }
 
         if (scene_dist > push_constants.max_dist) {

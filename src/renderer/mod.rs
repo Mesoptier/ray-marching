@@ -278,7 +278,7 @@ impl Renderer {
     }
 
     // TODO: Should not live here?
-    pub(crate) fn render(&mut self) {
+    pub(crate) fn render(&mut self, t: f32) {
         // Clean-up, to avoid memory issues
         self.previous_frame_end.as_mut().unwrap().cleanup_finished();
 
@@ -287,7 +287,7 @@ impl Renderer {
         let target_image = self.interim_view.clone();
         let compute_future = self
             .compute_pipeline
-            .compute(target_image.clone())
+            .compute(target_image.clone(), t)
             .join(acquire_future);
 
         let render_pass_future = self
