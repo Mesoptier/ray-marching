@@ -71,7 +71,14 @@ vec3 ray_march(in vec3 ro, in vec3 rd) {
         float scene_dist = sdf_scene(p);
 
         if (scene_dist < push_constants.min_dist) {
-            return calculate_normal(p) * 0.5 + 0.5;
+            vec3 normal = calculate_normal(p);
+
+            vec3 light_position = vec3(2.0, -5.0, 3.0);
+            vec3 direction_to_light = normalize(p - light_position);
+
+            float diffuse_intensity = max(0.0, dot(normal, direction_to_light));
+
+            return vec3(1.0, 0.0, 0.0) * diffuse_intensity;
         }
 
         if (scene_dist > push_constants.max_dist) {
