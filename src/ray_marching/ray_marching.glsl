@@ -16,7 +16,7 @@ layout(push_constant) uniform PushConstants {
     uint scene_size;
 } push_constants;
 
-float sdf_scene(vec3 p) {
+float sdf_scene(in vec3 p) {
     float dist = push_constants.max_dist;
 
     for (uint i = 0; i < push_constants.scene_size;) {
@@ -45,7 +45,36 @@ float sdf_scene(vec3 p) {
     return dist;
 }
 
+/// March a ray through the scene, starting at the ray origin `ro` in direction `rd`.
+vec3 ray_march(in vec3 ro, in vec3 rd) {
+    const uint NUMBER_OF_STEPS = 32;
+
+    float ray_dist = 0.0;
+
+    for (uint i = 0; i < NUMBER_OF_STEPS; ++i) {
+        // Current position along the ray
+        vec3 p = ro + ray_dist * rd;
+
+        float scene_dist = sdf_scene(p);
+
+        if (scene_dist < push_constants.min_dist) {
+            return vec3(i / float(NUMBER_OF_STEPS), 0.0, 0.0);
+        }
+
+        if (scene_dist > push_constants.max_dist) {
+            break;
+        }
+
+        ray_dist += scene_dist;
+    }
+
+    return vec3(0.0);
+}
+
 void main() {
-    vec4 write_color = vec4(sdf_scene(vec3(gl_GlobalInvocationID.xy / 100.0, 0.0)), 0.0, 0.0, 1.0);
+    vec3 ro = vec3(gl_GlobalInvocationID.xy / 100.0, -5.0);
+    vec3 rd = vec3(0.0, 0.0, 1.0);
+
+    vec4 write_color = vec4(ray_march(ro, rd), 1.0);
     imageStore(img, ivec2(gl_GlobalInvocationID.xy), write_color);
 }
