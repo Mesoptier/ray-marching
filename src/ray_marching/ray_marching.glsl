@@ -45,6 +45,19 @@ float sdf_scene(in vec3 p) {
     return dist;
 }
 
+/// Calculate the normal vector at point `p`.
+vec3 calculate_normal(in vec3 p) {
+    const vec3 h = vec3(0.001, 0.0, 0.0);
+
+    vec3 normal = vec3(
+        sdf_scene(p + h.xyy) - sdf_scene(p - h.xyy),
+        sdf_scene(p + h.yxy) - sdf_scene(p - h.yxy),
+        sdf_scene(p + h.yyx) - sdf_scene(p - h.yyx)
+    );
+
+    return normalize(normal);
+}
+
 /// March a ray through the scene, starting at the ray origin `ro` in direction `rd`.
 vec3 ray_march(in vec3 ro, in vec3 rd) {
     const uint NUMBER_OF_STEPS = 32;
@@ -58,7 +71,7 @@ vec3 ray_march(in vec3 ro, in vec3 rd) {
         float scene_dist = sdf_scene(p);
 
         if (scene_dist < push_constants.min_dist) {
-            return vec3(i / float(NUMBER_OF_STEPS), 0.0, 0.0);
+            return calculate_normal(p) * 0.5 + 0.5;
         }
 
         if (scene_dist > push_constants.max_dist) {
