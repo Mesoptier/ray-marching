@@ -90,7 +90,7 @@ vec3 calculate_normal(in vec3 p) {
 
 /// March a ray through the scene, starting at the ray origin `ro` in direction `rd`.
 vec3 ray_march(in vec3 ro, in vec3 rd) {
-    const uint NUMBER_OF_STEPS = 32;
+    const uint NUMBER_OF_STEPS = 64;
 
     float ray_dist = 0.0;
 
@@ -108,9 +108,9 @@ vec3 ray_march(in vec3 ro, in vec3 rd) {
             vec3 light_position = vec3(2.0, -5.0, 3.0);
             vec3 direction_to_light = normalize(p - light_position);
 
-            float diffuse_intensity = max(0.0, dot(normal, direction_to_light));
+            float diffuse_intensity = max(0.02, dot(normal, direction_to_light));
 
-            return vec3(1.0, 1.0, 0.0) * diffuse_intensity;
+            return vec3(0.4, 0.7, 0.1) * diffuse_intensity;
         }
 
         if (scene_dist > push_constants.max_dist) {
@@ -123,18 +123,41 @@ vec3 ray_march(in vec3 ro, in vec3 rd) {
     return vec3(0.0);
 }
 
+#define AA 3
+
 void main() {
     vec2 img_dims = vec2(imageSize(img));
-    vec2 uv = vec2(
-        (gl_GlobalInvocationID.x - img_dims.x / 2.0) / img_dims.x * 2.0,
-        (gl_GlobalInvocationID.y - img_dims.y / 2.0) / img_dims.x  * 2.0
-    );
 
     vec3 camera_position = vec3(0.0, 0.0, -5.0);
 
+    // Ray origin
     vec3 ro = camera_position;
-    vec3 rd = vec3(uv, 1.0);
 
-    vec4 write_color = vec4(ray_march(ro, rd), 1.0);
-    imageStore(img, ivec2(gl_GlobalInvocationID.xy), write_color);
+    vec3 total_color = vec3(0.0);
+
+    for (uint m = 0; m < AA; ++m) {
+        for (uint n = 0; n < AA; ++n) {
+            // Pixel offset for anti-aliasing
+            vec2 o = vec2(float(m), float(n)) / float(AA) - 0.5;
+
+            vec2 uv = vec2(
+                (gl_GlobalInvocationID.x - img_dims.x / 2.0 + o.x) / img_dims.x * 2.0,
+                (gl_GlobalInvocationID.y - img_dims.y / 2.0 + o.y) / img_dims.x  * 2.0
+            );
+
+            // Ray direction
+            vec3 rd = vec3(uv, 1.0);
+
+            // Ray march
+            vec3 color = ray_march(ro, rd);
+
+            // Gamma
+            color = sqrt(color);
+            total_color += color;
+        }
+    }
+
+    total_color = total_color / float(AA * AA);
+
+    imageStore(img, ivec2(gl_GlobalInvocationID.xy), vec4(total_color, 1.0));
 }
