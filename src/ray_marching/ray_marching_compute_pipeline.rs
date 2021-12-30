@@ -67,7 +67,7 @@ impl RayMarchingComputePipeline {
             }),
             p2: Box::new(Sphere {
                 radius: 1.0,
-                center: [(t / 2.0).sin(), 0.0, (t / 2.0).cos()],
+                center: [(t / 2.0).sin(), -(t / 2.0).sin(), (t / 2.0).cos()],
             }),
         };
         let mut builder = CSGCommandBufferBuilder::new();
