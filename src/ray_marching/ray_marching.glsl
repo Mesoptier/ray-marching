@@ -36,6 +36,11 @@ struct Call {
 #define CALL_STACK_MAX_SIZE 32
 
 float sdf_scene(in vec3 p) {
+    // Early return for empty scenes
+    if (push_constants.node_count == 0) {
+        return push_constants.max_dist;
+    }
+
     float value_stack[VALUE_STACK_MAX_SIZE];
     uint value_stack_size = 0;
 
@@ -104,6 +109,7 @@ float sdf_scene(in vec3 p) {
     }
 
     if (value_stack_size == 0) {
+        // Should be unreachable
         return push_constants.max_dist;
     }
 
