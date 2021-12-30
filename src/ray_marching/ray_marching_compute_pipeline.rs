@@ -10,6 +10,7 @@ use vulkano::sync::GpuFuture;
 
 use crate::ray_marching::csg::builder::{CSGCommandBufferBuilder, CSGCommandDescriptor};
 use crate::ray_marching::csg::CSGNode;
+use crate::ray_marching::csg::operations::subtraction::Subtraction;
 use crate::ray_marching::csg::operations::union::Union;
 use crate::ray_marching::csg::primitives::sphere::Sphere;
 use crate::renderer::InterimImageView;
@@ -42,7 +43,7 @@ impl RayMarchingComputePipeline {
             .unwrap()
         };
 
-        let node = Union {
+        let node = Subtraction {
             p1: Box::new(
                 Sphere {
                     radius: 1.0,

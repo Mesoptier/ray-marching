@@ -33,6 +33,7 @@ uint value_stack_size;
 // CSG Commands
 #define NODE_TYPE_SPHERE 0
 #define NODE_TYPE_UNION 100
+#define NODE_TYPE_SUBTRACTION 101
 #include "./csg/primitives/mod.glsl"
 #include "./csg/operations/mod.glsl"
 
@@ -56,6 +57,10 @@ float sdf_scene(in vec3 p) {
             }
             case NODE_TYPE_UNION: {
                 cmd_union();
+                break;
+            }
+            case NODE_TYPE_SUBTRACTION: {
+                cmd_subtract();
                 break;
             }
         }
