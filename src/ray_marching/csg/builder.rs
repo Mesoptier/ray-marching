@@ -4,21 +4,23 @@ pub enum CSGCommandType {
     // Primitives
     // (0 children, no space transform)
     Sphere = 0,
-    Box,
-    Plane,
+    // Box,
+    // Plane,
 
     // Binary operators
     // (2 children, no space transform)
     Union = 100,
     Subtraction,
-    Intersection,
+    // Intersection,
 
     // Space transformations
     // (1 child, transforms space)
-    Translation = 200,
-    Rotation,
-    Scale,
-    PopTransform,
+    // TranslationPush = 200,
+    // TranslationPop,
+    // RotationPush,
+    // RotationPop,
+    // ScalePush,
+    // ScalePop,
 }
 
 #[derive(Debug)]
