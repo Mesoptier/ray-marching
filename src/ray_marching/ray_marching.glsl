@@ -1,24 +1,27 @@
 #version 450
 
-#include "./csg/primitives/sphere/sdf.glsl"
-
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 layout(set = 0, binding = 0, rgba8) uniform writeonly image2D img;
 
-struct CSGNode {
-    uint node_type;
+struct CSGCommand {
+    uint cmd_type;
     uint param_offset;
-    uint child_count;
 };
 
-layout(set = 0, binding = 1) buffer CSGNodeBuffer {
-    CSGNode data[];
-} csg_nodes;
+layout(set = 0, binding = 1) buffer CSGCommandBuffer {
+    CSGCommand data[];
+} csg_commands;
 
 layout(set = 0, binding = 2) buffer CSGParamBuffer {
     uint data[];
 } csg_params;
+
+#define NODE_TYPE_SPHERE 0
+#define NODE_TYPE_UNION 100
+
+#include "./csg/primitives/mod.glsl"
+#include "./csg/operations/mod.glsl"
 
 layout(push_constant) uniform PushConstants {
     float min_dist;
@@ -27,13 +30,7 @@ layout(push_constant) uniform PushConstants {
     float t;
 } push_constants;
 
-struct Call {
-    CSGNode node;
-    uint processed_child_count;
-};
-
 #define VALUE_STACK_MAX_SIZE 32
-#define CALL_STACK_MAX_SIZE 32
 
 float sdf_scene(in vec3 p) {
     // Early return for empty scenes
@@ -44,74 +41,30 @@ float sdf_scene(in vec3 p) {
     float value_stack[VALUE_STACK_MAX_SIZE];
     uint value_stack_size = 0;
 
-    Call call_stack[CALL_STACK_MAX_SIZE];
-    uint call_stack_size = 0;
+    for (uint cmd_index = 0; cmd_index < push_constants.node_count; ++cmd_index) {
+        // Get the next command
+        CSGCommand cmd = csg_commands.data[cmd_index];
 
-    for (uint node_index = 0; node_index < push_constants.node_count; ++node_index) {
-        // Get the next node
-        CSGNode node = csg_nodes.data[node_index];
-
-        // Push this call onto the call stack
-        call_stack[call_stack_size] = Call(node, 0);
-        ++call_stack_size;
-
-        // Start call
-        switch (node.node_type) {
-            // Sphere
-            case 0: break;
-
-            // Union
-            case 100: break;
-        }
-
-        // Unwind call stack
-        while (call_stack_size > 0 && call_stack[call_stack_size - 1].node.child_count == call_stack[call_stack_size - 1].processed_child_count) {
-            float value = 0.0;
-
-            // Finish call
-            switch (call_stack[call_stack_size - 1].node.node_type) {
-                // Sphere
-                case 0: {
-                    uint param_offset = call_stack[call_stack_size - 1].node.param_offset;
-                    Sphere sphere = {
-                        vec3(
-                            uintBitsToFloat(csg_params.data[param_offset + 0]),
-                            uintBitsToFloat(csg_params.data[param_offset + 1]),
-                            uintBitsToFloat(csg_params.data[param_offset + 2])
-                        ),
-                        uintBitsToFloat(csg_params.data[param_offset + 3])
-                    };
-
-                    value = sdf_sphere(p, sphere);
-                    break;
-                }
-
-                // Union
-                case 100: {
-                    float v1 = value_stack[--value_stack_size];
-                    float v2 = value_stack[--value_stack_size];
-                    value = min(v1, v2);
-                    break;
-                }
+        switch (cmd.cmd_type) {
+            case NODE_TYPE_SPHERE: {
+                value_stack[value_stack_size] = cmd_sphere(p, cmd.param_offset);
+                ++value_stack_size;
+                break;
             }
-
-            // Push return value onto the value stack
-            value_stack[value_stack_size] = value;
-            ++value_stack_size;
-
-            // Pop completed call from the stack
-            --call_stack_size;
-
-            if (call_stack_size > 0) {
-                ++call_stack[call_stack_size - 1].processed_child_count;
+            case NODE_TYPE_UNION: {
+                float v2 = value_stack[--value_stack_size];
+                float v1 = value_stack[--value_stack_size];
+                value_stack[value_stack_size] = cmd_union(v1, v2);
+                ++value_stack_size;
+                break;
             }
         }
     }
 
-    if (value_stack_size == 0) {
-        // Should be unreachable
-        return push_constants.max_dist;
-    }
+//    // Should be unreachable
+//    if (value_stack_size == 0) {
+//        return push_constants.max_dist;
+//    }
 
     return value_stack[0];
 }

@@ -1,7 +1,5 @@
-use std::borrow::Borrow;
-
-use crate::ray_marching::csg::{CSGNode, CSGNodeType};
-use crate::ray_marching::csg::builder::CSGNodeBufferBuilder;
+use crate::ray_marching::csg::builder::{CSGCommandBufferBuilder, CSGCommandType};
+use crate::ray_marching::csg::CSGNode;
 
 pub struct Sphere {
     // TODO: Remove center in favor of just adding a Translation node
@@ -10,13 +8,9 @@ pub struct Sphere {
 }
 
 impl CSGNode for Sphere {
-    fn node_type() -> CSGNodeType {
-        CSGNodeType::Sphere
-    }
-
-    fn foo(&self, builder: &mut CSGNodeBufferBuilder) {
+    fn build_commands(&self, builder: &mut CSGCommandBufferBuilder) {
         builder
-            .push_node(Self::node_type(), 0)
+            .push_command(CSGCommandType::Sphere)
             .push_param_vec3(self.center)
             .push_param_float(self.radius);
     }

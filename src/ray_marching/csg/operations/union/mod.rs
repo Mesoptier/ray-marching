@@ -1,5 +1,5 @@
-use crate::ray_marching::csg::{CSGNode, CSGNodeType};
-use crate::ray_marching::csg::builder::CSGNodeBufferBuilder;
+use crate::ray_marching::csg::builder::{CSGCommandBufferBuilder, CSGCommandType};
+use crate::ray_marching::csg::CSGNode;
 
 pub struct Union {
     pub p1: Box<dyn CSGNode>,
@@ -7,14 +7,9 @@ pub struct Union {
 }
 
 impl CSGNode for Union {
-    fn node_type() -> CSGNodeType {
-        CSGNodeType::Union
-    }
-
-    fn foo(&self, builder: &mut CSGNodeBufferBuilder) {
-        builder.push_node(Self::node_type(), 2);
-
-        self.p1.foo(builder);
-        self.p2.foo(builder);
+    fn build_commands(&self, builder: &mut CSGCommandBufferBuilder) {
+        self.p1.build_commands(builder);
+        self.p2.build_commands(builder);
+        builder.push_command(CSGCommandType::Union);
     }
 }
