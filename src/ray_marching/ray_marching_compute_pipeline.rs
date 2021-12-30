@@ -65,7 +65,7 @@ impl RayMarchingComputePipeline {
 
         let csg_commands_buffer = CpuAccessibleBuffer::from_iter(
             gfx_queue.device().clone(),
-            BufferUsage::all(),
+            BufferUsage::storage_buffer(),
             false,
             builder.commands.into_iter(),
         )
@@ -73,7 +73,7 @@ impl RayMarchingComputePipeline {
 
         let csg_params_buffer = CpuAccessibleBuffer::from_iter(
             gfx_queue.device().clone(),
-            BufferUsage::all(),
+            BufferUsage::storage_buffer(),
             false,
             builder.params.into_iter(),
         )
