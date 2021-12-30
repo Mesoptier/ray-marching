@@ -1,2 +1,2 @@
-#include "./union/mod.glsl"
-#include "./subtraction/mod.glsl"
+#include "./union.glsl"
+#include "./subtraction.glsl"
