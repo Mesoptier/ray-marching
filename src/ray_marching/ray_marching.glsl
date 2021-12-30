@@ -20,7 +20,7 @@ layout(set = 0, binding = 2) buffer CSGParamBuffer {
 layout(push_constant) uniform PushConstants {
     float min_dist;
     float max_dist;
-    uint node_count;
+    uint cmd_count;
     float t;
 } push_constants;
 
@@ -39,14 +39,14 @@ uint value_stack_size;
 
 float sdf_scene(in vec3 p) {
     // Early return for empty scenes
-    if (push_constants.node_count == 0) {
+    if (push_constants.cmd_count == 0) {
         return push_constants.max_dist;
     }
 
     // Reset stack
     value_stack_size = 0;
 
-    for (uint cmd_index = 0; cmd_index < push_constants.node_count; ++cmd_index) {
+    for (uint cmd_index = 0; cmd_index < push_constants.cmd_count; ++cmd_index) {
         // Get the next command
         CSGCommand cmd = csg_commands.data[cmd_index];
 
@@ -110,7 +110,7 @@ vec3 ray_march(in vec3 ro, in vec3 rd) {
 
             float diffuse_intensity = max(0.0, dot(normal, direction_to_light));
 
-            return vec3(sin(push_constants.t), -sin(push_constants.t), 0.0) * diffuse_intensity;
+            return vec3(1.0, 1.0, 0.0) * diffuse_intensity;
         }
 
         if (scene_dist > push_constants.max_dist) {
