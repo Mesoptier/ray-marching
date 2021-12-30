@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, CpuBufferPool, TypedBufferAccess};
+use vulkano::buffer::{BufferUsage, CpuBufferPool};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryCommandBuffer};
 use vulkano::descriptor_set::PersistentDescriptorSet;
 use vulkano::device::Queue;
@@ -10,7 +10,6 @@ use vulkano::sync::GpuFuture;
 
 use crate::ray_marching::csg::builder::{CSGCommandBufferBuilder, CSGCommandDescriptor};
 use crate::ray_marching::csg::operations::subtraction::Subtraction;
-use crate::ray_marching::csg::operations::union::Union;
 use crate::ray_marching::csg::primitives::sphere::Sphere;
 use crate::ray_marching::csg::CSGNode;
 use crate::renderer::InterimImageView;
