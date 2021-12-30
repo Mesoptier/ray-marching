@@ -31,9 +31,9 @@ float value_stack_data[VALUE_STACK_MAX_SIZE];
 uint value_stack_size;
 
 // CSG Commands
-#define NODE_TYPE_SPHERE 0
-#define NODE_TYPE_UNION 100
-#define NODE_TYPE_SUBTRACTION 101
+#define CMD_TYPE_SPHERE 0
+#define CMD_TYPE_UNION 100
+#define CMD_TYPE_SUBTRACTION 101
 #include "./csg/primitives/mod.glsl"
 #include "./csg/operations/mod.glsl"
 
@@ -51,15 +51,15 @@ float sdf_scene(in vec3 p) {
         CSGCommand cmd = csg_commands.data[cmd_index];
 
         switch (cmd.cmd_type) {
-            case NODE_TYPE_SPHERE: {
+            case CMD_TYPE_SPHERE: {
                 cmd_sphere(p, cmd.param_offset);
                 break;
             }
-            case NODE_TYPE_UNION: {
+            case CMD_TYPE_UNION: {
                 cmd_union();
                 break;
             }
-            case NODE_TYPE_SUBTRACTION: {
+            case CMD_TYPE_SUBTRACTION: {
                 cmd_subtract();
                 break;
             }
