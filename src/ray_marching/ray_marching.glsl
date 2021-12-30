@@ -17,12 +17,6 @@ layout(set = 0, binding = 2) buffer CSGParamBuffer {
     uint data[];
 } csg_params;
 
-#define NODE_TYPE_SPHERE 0
-#define NODE_TYPE_UNION 100
-
-#include "./csg/primitives/mod.glsl"
-#include "./csg/operations/mod.glsl"
-
 layout(push_constant) uniform PushConstants {
     float min_dist;
     float max_dist;
@@ -30,7 +24,17 @@ layout(push_constant) uniform PushConstants {
     float t;
 } push_constants;
 
+// Execution context
 #define VALUE_STACK_MAX_SIZE 32
+
+float value_stack_data[VALUE_STACK_MAX_SIZE];
+uint value_stack_size;
+
+// CSG Commands
+#define NODE_TYPE_SPHERE 0
+#define NODE_TYPE_UNION 100
+#include "./csg/primitives/mod.glsl"
+#include "./csg/operations/mod.glsl"
 
 float sdf_scene(in vec3 p) {
     // Early return for empty scenes
@@ -38,8 +42,8 @@ float sdf_scene(in vec3 p) {
         return push_constants.max_dist;
     }
 
-    float value_stack[VALUE_STACK_MAX_SIZE];
-    uint value_stack_size = 0;
+    // Reset stack
+    value_stack_size = 0;
 
     for (uint cmd_index = 0; cmd_index < push_constants.node_count; ++cmd_index) {
         // Get the next command
@@ -47,15 +51,11 @@ float sdf_scene(in vec3 p) {
 
         switch (cmd.cmd_type) {
             case NODE_TYPE_SPHERE: {
-                value_stack[value_stack_size] = cmd_sphere(p, cmd.param_offset);
-                ++value_stack_size;
+                cmd_sphere(p, cmd.param_offset);
                 break;
             }
             case NODE_TYPE_UNION: {
-                float v2 = value_stack[--value_stack_size];
-                float v1 = value_stack[--value_stack_size];
-                value_stack[value_stack_size] = cmd_union(v1, v2);
-                ++value_stack_size;
+                cmd_union();
                 break;
             }
         }
@@ -66,7 +66,8 @@ float sdf_scene(in vec3 p) {
 //        return push_constants.max_dist;
 //    }
 
-    return value_stack[0];
+    // Pop last value of the stack
+    return value_stack_data[--value_stack_size];
 }
 
 /// Calculate the normal vector at point `p`.
