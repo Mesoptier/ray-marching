@@ -66,7 +66,7 @@ impl RayMarchingComputePipeline {
             }),
             p2: Box::new(Sphere {
                 radius: 1.0,
-                center: [(t / 2.0).sin(), -(t / 2.0).sin(), (t / 2.0).cos()],
+                center: [(t / 20.0).sin(), -(t / 20.0).sin(), (t / 20.0).cos()],
             }),
         };
         let mut builder = CSGCommandBufferBuilder::new();
@@ -95,7 +95,7 @@ impl RayMarchingComputePipeline {
 
         let push_constants = cs::ty::PushConstants {
             min_dist: 0.001f32,
-            max_dist: 10f32,
+            max_dist: 100f32,
             cmd_count,
             t,
         };

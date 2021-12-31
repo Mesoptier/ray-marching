@@ -128,7 +128,16 @@ vec3 ray_march(in vec3 ro, in vec3 rd) {
 void main() {
     vec2 img_dims = vec2(imageSize(img));
 
-    vec3 camera_position = vec3(0.0, 0.0, -5.0);
+    // Camera
+    float angle = push_constants.t * 0.5;
+    vec3 camera_position = vec3(5.0 * cos(angle), 2.0, 5.0 * sin(angle));
+    vec3 camera_up = vec3(0.0, 1.0, 0.0);
+    vec3 camera_target = vec3(0.0);
+
+    // Camera matrix
+    vec3 ww = normalize(camera_target - camera_position);
+    vec3 uu = normalize(cross(ww, camera_up));
+    vec3 vv = normalize(cross(uu, ww));
 
     // Ray origin
     vec3 ro = camera_position;
@@ -138,15 +147,17 @@ void main() {
     for (uint m = 0; m < AA; ++m) {
         for (uint n = 0; n < AA; ++n) {
             // Pixel offset for anti-aliasing
-            vec2 o = vec2(float(m), float(n)) / float(AA) - 0.5;
+            vec2 aa_offset = vec2(float(m), float(n)) / float(AA) - 0.5;
 
+            // TODO: use vector functions instead of constructing new vector
             vec2 uv = vec2(
-                (gl_GlobalInvocationID.x - img_dims.x / 2.0 + o.x) / img_dims.x * 2.0,
-                (gl_GlobalInvocationID.y - img_dims.y / 2.0 + o.y) / img_dims.x  * 2.0
+                (gl_GlobalInvocationID.x - img_dims.x / 2.0 + aa_offset.x) / img_dims.x * 2.0,
+                (gl_GlobalInvocationID.y - img_dims.y / 2.0 + aa_offset.y) / img_dims.x  * 2.0
             );
 
             // Ray direction
-            vec3 rd = vec3(uv, 1.0);
+            float focal_length = 1.5;
+            vec3 rd = normalize(vec3(uv.x * uu + uv.y * vv + focal_length * ww));
 
             // Ray march
             vec3 color = ray_march(ro, rd);
