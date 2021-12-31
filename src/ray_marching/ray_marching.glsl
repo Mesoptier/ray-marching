@@ -104,6 +104,7 @@ vec3 calculate_normal(in vec3 p) {
 vec3 ray_march(in vec3 ro, in vec3 rd) {
     const uint NUMBER_OF_STEPS = 64;
 
+    // Ray-march the scene
     float ray_dist = 0.0;
 
     for (uint i = 0; i < NUMBER_OF_STEPS; ++i) {
@@ -130,6 +131,18 @@ vec3 ray_march(in vec3 ro, in vec3 rd) {
         }
 
         ray_dist += scene_dist;
+    }
+
+    // Ray-trace the floor plane
+    // TODO: Add CSG node for this?
+    float tp1 = (-1.5 - ro.y) / rd.y;
+    if (tp1 > 0.0) {
+        // Basic checkerboard pattern
+        // See: https://iquilezles.org/www/articles/checkerfiltering/checkerfiltering.htm
+        vec3 p = ro + rd * tp1;
+        ivec2 ip = ivec2(round(p.xz+.5));
+        float col = float((ip.x^ip.y)&1);
+        return vec3(0.1, 0.1, 0.2) + vec3(0.2) * col;
     }
 
     return vec3(0.0);
