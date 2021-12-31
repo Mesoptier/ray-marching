@@ -18,10 +18,11 @@ fn main() {
         use winit::event::*;
         use winit::event_loop::ControlFlow;
 
-        let next_frame_time = Instant::now() + Duration::from_nanos(16_666_667);
-        *control_flow = ControlFlow::WaitUntil(next_frame_time);
-
         match event {
+            Event::NewEvents(sc) => {
+                let next_frame_time = Instant::now() + Duration::from_nanos(16_666_667);
+                *control_flow = ControlFlow::WaitUntil(next_frame_time);
+            }
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
                 *control_flow = ControlFlow::Exit;
             }
