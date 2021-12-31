@@ -25,6 +25,9 @@ fn main() {
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
                 *control_flow = ControlFlow::Exit;
             }
+            Event::WindowEvent { event: WindowEvent::Resized(..), .. } => {
+                renderer.resize();
+            }
             Event::MainEventsCleared => {
                 let running_time = Instant::now() - start_time;
                 renderer.render(running_time.as_secs_f32());

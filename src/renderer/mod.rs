@@ -9,7 +9,7 @@ use vulkano::format::Format;
 use vulkano::image::{
     AttachmentImage, ImageAccess, ImageUsage, ImageViewAbstract, SampleCount, SwapchainImage,
 };
-use vulkano::image::view::ImageView;
+use vulkano::image::view::{ImageView, ImageViewCreationError};
 use vulkano::instance::Instance;
 use vulkano::swapchain::{
     AcquireError, ColorSpace, FullscreenExclusive, PresentMode, Surface, SurfaceTransform,
@@ -93,22 +93,9 @@ impl Renderer {
         let render_pass = RenderPassPlaceOverFrame::new(queue.clone(), image_format);
 
         let compute_pipeline = RayMarchingComputePipeline::new(queue.clone());
-        let interim_view = ImageView::new(
-            AttachmentImage::multisampled_with_usage(
-                device.clone(),
-                image_dimensions.width_height(),
-                SampleCount::Sample1,
-                Format::R8G8B8A8_UNORM,
-                ImageUsage {
-                    sampled: true,
-                    input_attachment: true,
-                    storage: true,
-                    ..ImageUsage::none()
-                },
-            )
-            .unwrap(),
-        )
-        .unwrap();
+        let interim_view =
+            Self::create_interim_image_view(device.clone(), image_dimensions.width_height())
+                .unwrap();
 
         Self {
             _instance: instance,
@@ -125,6 +112,27 @@ impl Renderer {
             render_pass,
             compute_pipeline,
         }
+    }
+
+    fn create_interim_image_view(
+        device: Arc<Device>,
+        dimensions: [u32; 2],
+    ) -> Result<InterimImageView, ImageViewCreationError> {
+        ImageView::new(
+            AttachmentImage::multisampled_with_usage(
+                device,
+                dimensions,
+                SampleCount::Sample1,
+                Format::R8G8B8A8_UNORM,
+                ImageUsage {
+                    sampled: true,
+                    input_attachment: true,
+                    storage: true,
+                    ..ImageUsage::none()
+                },
+            )
+            .unwrap(),
+        )
     }
 
     /// Creates vulkan device with required queue families and required extensions.
@@ -181,7 +189,7 @@ impl Renderer {
             .sharing_mode(&queue)
             .composite_alpha(alpha)
             .transform(SurfaceTransform::Identity)
-            .present_mode(PresentMode::Immediate)
+            .present_mode(PresentMode::Fifo)
             .fullscreen_exclusive(FullscreenExclusive::Default)
             .clipped(true)
             .color_space(ColorSpace::SrgbNonLinear)
@@ -218,7 +226,15 @@ impl Renderer {
             .map(|image| ImageView::new(image).unwrap())
             .collect();
 
+        // Recreate image views
+        self.interim_view =
+            Self::create_interim_image_view(self.device.clone(), dimensions).unwrap();
+
         self.recreate_swap_chain = false;
+    }
+
+    pub(crate) fn resize(&mut self) {
+        self.recreate_swap_chain = true;
     }
 
     fn start_frame(&mut self) -> Result<Box<dyn GpuFuture>, AcquireError> {
