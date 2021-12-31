@@ -37,7 +37,8 @@ uint value_stack_size;
 #include "./csg/primitives/mod.glsl"
 #include "./csg/operations/mod.glsl"
 
-float sdf_scene(in vec3 p) {
+/// Computes distance from point `p` to the scene.
+float map_scene(in vec3 p) {
     // Early return for empty scenes
     if (push_constants.cmd_count == 0) {
         return push_constants.max_dist;
@@ -80,9 +81,9 @@ vec3 calculate_normal(in vec3 p) {
     const vec3 h = vec3(0.001, 0.0, 0.0);
 
     vec3 normal = vec3(
-        sdf_scene(p + h.xyy) - sdf_scene(p - h.xyy),
-        sdf_scene(p + h.yxy) - sdf_scene(p - h.yxy),
-        sdf_scene(p + h.yyx) - sdf_scene(p - h.yyx)
+        map_scene(p + h.xyy) - map_scene(p - h.xyy),
+        map_scene(p + h.yxy) - map_scene(p - h.yxy),
+        map_scene(p + h.yyx) - map_scene(p - h.yyx)
     );
 
     return normalize(normal);
@@ -98,7 +99,7 @@ vec3 ray_march(in vec3 ro, in vec3 rd) {
         // Current position along the ray
         vec3 p = ro + ray_dist * rd;
 
-        float scene_dist = sdf_scene(p);
+        float scene_dist = map_scene(p);
 
         if (scene_dist < push_constants.min_dist) {
 //            return vec3(1.0, 0.0, 0.0);
