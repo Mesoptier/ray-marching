@@ -134,6 +134,8 @@ void main() {
     vec3 camera_up = vec3(0.0, 1.0, 0.0);
     vec3 camera_target = vec3(0.0);
 
+    float focal_length = 2.5;
+
     // Camera matrix
     vec3 ww = normalize(camera_target - camera_position);
     vec3 uu = normalize(cross(ww, camera_up));
@@ -148,15 +150,9 @@ void main() {
         for (uint n = 0; n < AA; ++n) {
             // Pixel offset for anti-aliasing
             vec2 aa_offset = vec2(float(m), float(n)) / float(AA) - 0.5;
-
-            // TODO: use vector functions instead of constructing new vector
-            vec2 uv = vec2(
-                (gl_GlobalInvocationID.x - img_dims.x / 2.0 + aa_offset.x) / img_dims.x * 2.0,
-                (gl_GlobalInvocationID.y - img_dims.y / 2.0 + aa_offset.y) / img_dims.x  * 2.0
-            );
+            vec2 uv = (2.0 * (gl_GlobalInvocationID.xy + aa_offset) - img_dims.xy) / img_dims.y;
 
             // Ray direction
-            float focal_length = 1.5;
             vec3 rd = normalize(vec3(uv.x * uu + uv.y * vv + focal_length * ww));
 
             // Ray march
