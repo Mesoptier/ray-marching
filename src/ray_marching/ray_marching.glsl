@@ -77,16 +77,27 @@ float map_scene(in vec3 p) {
 }
 
 /// Calculate the normal vector at point `p`.
+/// See: https://www.iquilezles.org/www/articles/normalsSDF/normalsSDF.htm
 vec3 calculate_normal(in vec3 p) {
-    const vec3 h = vec3(0.001, 0.0, 0.0);
-
-    vec3 normal = vec3(
-        map_scene(p + h.xyy) - map_scene(p - h.xyy),
-        map_scene(p + h.yxy) - map_scene(p - h.yxy),
-        map_scene(p + h.yyx) - map_scene(p - h.yyx)
+    // Tetrahedron technique
+    const float eps = 0.0001;
+    const vec2 k = vec2(1, -1);
+    return normalize(
+        k.xyy * map_scene(p + k.xyy * eps) +
+        k.yyx * map_scene(p + k.yyx * eps) +
+        k.yxy * map_scene(p + k.yxy * eps) +
+        k.xxx * map_scene(p + k.xxx * eps)
     );
 
-    return normalize(normal);
+    // Central differences
+//    const float eps = 0.0001;
+//    const vec3 h = vec3(eps, 0.0, 0.0);
+//    vec3 normal = vec3(
+//        map_scene(p + h.xyy) - map_scene(p - h.xyy),
+//        map_scene(p + h.yxy) - map_scene(p - h.yxy),
+//        map_scene(p + h.yyx) - map_scene(p - h.yyx)
+//    );
+//    return normalize(normal);
 }
 
 /// March a ray through the scene, starting at the ray origin `ro` in direction `rd`.
