@@ -7,12 +7,12 @@ use vulkano::device::Queue;
 use vulkano::image::ImageAccess;
 use vulkano::pipeline::{ComputePipeline, Pipeline, PipelineBindPoint};
 use vulkano::sync::GpuFuture;
+use vulkano_util::renderer::DeviceImageView;
 
 use crate::ray_marching::csg::builder::{CSGCommandBufferBuilder, CSGCommandDescriptor};
 use crate::ray_marching::csg::operations::subtraction::Subtraction;
 use crate::ray_marching::csg::primitives::sphere::Sphere;
 use crate::ray_marching::csg::CSGNode;
-use crate::renderer::InterimImageView;
 
 mod cs {
     vulkano_shaders::shader! {
@@ -55,7 +55,7 @@ impl RayMarchingComputePipeline {
         }
     }
 
-    pub fn compute(&mut self, image: InterimImageView, t: f32) -> Box<dyn GpuFuture> {
+    pub fn compute(&mut self, image: DeviceImageView, t: f32) -> Box<dyn GpuFuture> {
         let dimensions = image.image().dimensions().width_height();
 
         // Fill CSG buffers

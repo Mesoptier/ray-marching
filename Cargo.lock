@@ -740,6 +740,7 @@ dependencies = [
  "bytemuck",
  "vulkano",
  "vulkano-shaders",
+ "vulkano-util",
  "vulkano-win",
  "winit",
 ]
@@ -1013,6 +1014,17 @@ dependencies = [
  "shaderc",
  "syn 1.0.84",
  "vulkano",
+]
+
+[[package]]
+name = "vulkano-util"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef6a48080bfb658295298f0ed796aa2f0e597ef3fb7b379a9f4ac31fab8fe62e"
+dependencies = [
+ "vulkano",
+ "vulkano-win",
+ "winit",
 ]
 
 [[package]]
