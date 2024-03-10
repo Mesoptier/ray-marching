@@ -82,7 +82,7 @@ impl RayMarchingComputePipeline {
 
         // Describe layout
         let pipeline_layout = self.pipeline.layout();
-        let desc_layout = pipeline_layout.descriptor_set_layouts().get(0).unwrap();
+        let desc_layout = pipeline_layout.set_layouts().get(0).unwrap();
         let set = PersistentDescriptorSet::new(
             desc_layout.clone(),
             [

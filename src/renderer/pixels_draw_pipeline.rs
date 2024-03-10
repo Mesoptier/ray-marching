@@ -9,6 +9,7 @@
 
 use std::sync::Arc;
 
+use bytemuck::{Pod, Zeroable};
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, TypedBufferAccess};
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, SecondaryAutoCommandBuffer,
@@ -21,11 +22,11 @@ use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
 use vulkano::render_pass::Subpass;
-use vulkano::sampler::{Filter, Sampler, SamplerAddressMode, SamplerMipmapMode};
+use vulkano::sampler::{Sampler, SamplerCreateInfo};
 
 /// Vertex for textured quads
 #[repr(C)]
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, Zeroable, Pod)]
 pub struct TexturedVertex {
     pub position: [f32; 2],
     pub tex_coords: [f32; 2],
@@ -107,18 +108,12 @@ impl PixelsDrawPipeline {
         &self,
         image: Arc<dyn ImageViewAbstract>,
     ) -> Arc<PersistentDescriptorSet> {
-        let layout = self
-            .pipeline
-            .layout()
-            .descriptor_set_layouts()
-            .get(0)
-            .unwrap();
-        let sampler = Sampler::start(self.gfx_queue.device().clone())
-            .filter(Filter::Linear)
-            .mipmap_mode(SamplerMipmapMode::Linear)
-            .address_mode(SamplerAddressMode::Repeat)
-            .build()
-            .unwrap();
+        let layout = self.pipeline.layout().set_layouts().get(0).unwrap();
+        let sampler = Sampler::new(
+            self.gfx_queue.device().clone(),
+            SamplerCreateInfo::simple_repeat_linear(),
+        )
+        .unwrap();
 
         PersistentDescriptorSet::new(
             layout.clone(),

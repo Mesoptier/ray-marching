@@ -1,3 +1,5 @@
+use bytemuck::{Pod, Zeroable};
+
 #[derive(Debug)]
 #[repr(u32)]
 pub enum CSGCommandType {
@@ -23,10 +25,20 @@ pub enum CSGCommandType {
     // ScalePop,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Zeroable, Pod)]
+#[repr(C)]
 pub struct CSGCommandDescriptor {
-    _cmd_type: CSGCommandType,
+    _cmd_type: u32,
     _param_offset: u32,
+}
+
+impl CSGCommandDescriptor {
+    pub fn new(cmd_type: CSGCommandType, param_offset: u32) -> Self {
+        Self {
+            _cmd_type: cmd_type as u32,
+            _param_offset: param_offset,
+        }
+    }
 }
 
 pub struct CSGCommandBufferBuilder {
@@ -45,10 +57,10 @@ impl CSGCommandBufferBuilder {
     /// Push a command onto the command stack.
     /// Must be called before pushing the command parameters.
     pub fn push_command(&mut self, cmd_type: CSGCommandType) -> &mut Self {
-        self.commands.push(CSGCommandDescriptor {
-            _cmd_type: cmd_type,
-            _param_offset: self.params.len() as u32,
-        });
+        self.commands.push(CSGCommandDescriptor::new(
+            cmd_type,
+            self.params.len() as u32,
+        ));
         self
     }
 
