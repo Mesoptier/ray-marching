@@ -1,10 +1,15 @@
 use std::sync::Arc;
 
 use vulkano::buffer::{BufferUsage, CpuBufferPool};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryCommandBuffer};
+use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
+use vulkano::command_buffer::{
+    AutoCommandBufferBuilder, CommandBufferUsage, PrimaryCommandBufferAbstract,
+};
+use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::device::Queue;
 use vulkano::image::ImageAccess;
+use vulkano::memory::allocator::{MemoryUsage, StandardMemoryAllocator};
 use vulkano::pipeline::{ComputePipeline, Pipeline, PipelineBindPoint};
 use vulkano::sync::GpuFuture;
 use vulkano_util::renderer::DeviceImageView;
@@ -31,10 +36,17 @@ pub struct RayMarchingComputePipeline {
     pipeline: Arc<ComputePipeline>,
     csg_commands_buffer_pool: CpuBufferPool<CSGCommandDescriptor>,
     csg_params_buffer_pool: CpuBufferPool<u32>,
+    command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
+    descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
 }
 
 impl RayMarchingComputePipeline {
-    pub fn new(gfx_queue: Arc<Queue>) -> Self {
+    pub fn new(
+        gfx_queue: Arc<Queue>,
+        memory_allocator: Arc<StandardMemoryAllocator>,
+        command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
+        descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
+    ) -> Self {
         let pipeline = {
             let cs = cs::load(gfx_queue.device().clone()).unwrap();
             ComputePipeline::new(
@@ -48,18 +60,20 @@ impl RayMarchingComputePipeline {
         };
 
         let csg_commands_buffer_pool = CpuBufferPool::new(
-            gfx_queue.device().clone(),
+            memory_allocator.clone(),
             BufferUsage {
                 storage_buffer: true,
                 ..BufferUsage::empty()
             },
+            MemoryUsage::Upload,
         );
         let csg_params_buffer_pool = CpuBufferPool::new(
-            gfx_queue.device().clone(),
+            memory_allocator.clone(),
             BufferUsage {
                 storage_buffer: true,
                 ..BufferUsage::empty()
             },
+            MemoryUsage::Upload,
         );
 
         Self {
@@ -67,6 +81,8 @@ impl RayMarchingComputePipeline {
             pipeline,
             csg_commands_buffer_pool,
             csg_params_buffer_pool,
+            command_buffer_allocator,
+            descriptor_set_allocator,
         }
     }
 
@@ -102,6 +118,7 @@ impl RayMarchingComputePipeline {
         let pipeline_layout = self.pipeline.layout();
         let desc_layout = pipeline_layout.set_layouts().get(0).unwrap();
         let set = PersistentDescriptorSet::new(
+            &self.descriptor_set_allocator,
             desc_layout.clone(),
             [
                 WriteDescriptorSet::image_view(0, image.clone()),
@@ -120,7 +137,7 @@ impl RayMarchingComputePipeline {
 
         // Build primary command buffer
         let mut builder = AutoCommandBufferBuilder::primary(
-            self.gfx_queue.device().clone(),
+            &self.command_buffer_allocator,
             self.gfx_queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         )

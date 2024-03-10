@@ -11,13 +11,16 @@ use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, TypedBufferAccess};
+use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage,
     SecondaryAutoCommandBuffer,
 };
+use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::device::Queue;
 use vulkano::image::ImageViewAbstract;
+use vulkano::memory::allocator::MemoryAllocator;
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
@@ -63,15 +66,23 @@ pub struct PixelsDrawPipeline {
     gfx_queue: Arc<Queue>,
     subpass: Subpass,
     pipeline: Arc<GraphicsPipeline>,
+    command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
+    descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     vertices: Arc<CpuAccessibleBuffer<[TexturedVertex]>>,
     indices: Arc<CpuAccessibleBuffer<[u32]>>,
 }
 
 impl PixelsDrawPipeline {
-    pub fn new(gfx_queue: Arc<Queue>, subpass: Subpass) -> PixelsDrawPipeline {
+    pub fn new(
+        gfx_queue: Arc<Queue>,
+        subpass: Subpass,
+        memory_allocator: &impl MemoryAllocator,
+        command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
+        descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
+    ) -> PixelsDrawPipeline {
         let (vertices, indices) = textured_quad(2.0, 2.0);
         let vertex_buffer = CpuAccessibleBuffer::<[TexturedVertex]>::from_iter(
-            gfx_queue.device().clone(),
+            memory_allocator,
             BufferUsage {
                 vertex_buffer: true,
                 ..BufferUsage::empty()
@@ -81,7 +92,7 @@ impl PixelsDrawPipeline {
         )
         .unwrap();
         let index_buffer = CpuAccessibleBuffer::<[u32]>::from_iter(
-            gfx_queue.device().clone(),
+            memory_allocator,
             BufferUsage {
                 index_buffer: true,
                 ..BufferUsage::empty()
@@ -108,6 +119,8 @@ impl PixelsDrawPipeline {
             gfx_queue,
             subpass,
             pipeline,
+            command_buffer_allocator,
+            descriptor_set_allocator,
             vertices: vertex_buffer,
             indices: index_buffer,
         }
@@ -125,6 +138,7 @@ impl PixelsDrawPipeline {
         .unwrap();
 
         PersistentDescriptorSet::new(
+            &self.descriptor_set_allocator,
             layout.clone(),
             [WriteDescriptorSet::image_view_sampler(
                 0,
@@ -142,7 +156,7 @@ impl PixelsDrawPipeline {
         image: Arc<dyn ImageViewAbstract>,
     ) -> SecondaryAutoCommandBuffer {
         let mut builder = AutoCommandBufferBuilder::secondary(
-            self.gfx_queue.device().clone(),
+            &self.command_buffer_allocator,
             self.gfx_queue.queue_family_index(),
             CommandBufferUsage::MultipleSubmit,
             CommandBufferInheritanceInfo {
