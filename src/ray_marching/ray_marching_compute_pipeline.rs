@@ -17,7 +17,12 @@ use crate::ray_marching::csg::CSGNode;
 mod cs {
     vulkano_shaders::shader! {
         ty: "compute",
-        path: "src/ray_marching/ray_marching.glsl"
+        path: "src/ray_marching/ray_marching.glsl",
+        types_meta: {
+            // TODO: Remove this once vulkano-shaders adds `BufferContents` automatically
+            use bytemuck::{Pod, Zeroable};
+            #[derive(Copy, Clone, Pod, Zeroable)]
+        }
     }
 }
 
@@ -42,10 +47,20 @@ impl RayMarchingComputePipeline {
             .unwrap()
         };
 
-        let csg_commands_buffer_pool =
-            CpuBufferPool::new(gfx_queue.device().clone(), BufferUsage::storage_buffer());
-        let csg_params_buffer_pool =
-            CpuBufferPool::new(gfx_queue.device().clone(), BufferUsage::storage_buffer());
+        let csg_commands_buffer_pool = CpuBufferPool::new(
+            gfx_queue.device().clone(),
+            BufferUsage {
+                storage_buffer: true,
+                ..BufferUsage::empty()
+            },
+        );
+        let csg_params_buffer_pool = CpuBufferPool::new(
+            gfx_queue.device().clone(),
+            BufferUsage {
+                storage_buffer: true,
+                ..BufferUsage::empty()
+            },
+        );
 
         Self {
             gfx_queue,
@@ -76,9 +91,12 @@ impl RayMarchingComputePipeline {
 
         let csg_commands_buffer = self
             .csg_commands_buffer_pool
-            .chunk(builder.commands)
+            .from_iter(builder.commands)
             .unwrap();
-        let csg_params_buffer = self.csg_params_buffer_pool.chunk(builder.params).unwrap();
+        let csg_params_buffer = self
+            .csg_params_buffer_pool
+            .from_iter(builder.params)
+            .unwrap();
 
         // Describe layout
         let pipeline_layout = self.pipeline.layout();
@@ -103,7 +121,7 @@ impl RayMarchingComputePipeline {
         // Build primary command buffer
         let mut builder = AutoCommandBufferBuilder::primary(
             self.gfx_queue.device().clone(),
-            self.gfx_queue.family(),
+            self.gfx_queue.queue_family_index(),
             CommandBufferUsage::OneTimeSubmit,
         )
         .unwrap();

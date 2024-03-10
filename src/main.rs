@@ -38,7 +38,7 @@ fn main() {
             sampled: true,
             input_attachment: true,
             storage: true,
-            ..ImageUsage::none()
+            ..ImageUsage::empty()
         },
     );
 
