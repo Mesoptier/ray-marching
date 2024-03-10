@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
+use vulkano::command_buffer::allocator::{
+    StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo,
+};
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::device::Queue;
 use vulkano::format::Format;
@@ -21,16 +23,20 @@ impl App {
         ));
         let command_buffer_allocator = Arc::new(StandardCommandBufferAllocator::new(
             gfx_queue.device().clone(),
-            Default::default(),
+            StandardCommandBufferAllocatorCreateInfo {
+                secondary_buffer_count: 32,
+                ..Default::default()
+            },
         ));
         let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
             gfx_queue.device().clone(),
+            Default::default(),
         ));
 
         Self {
             render_pass: RenderPassPlaceOverFrame::new(
                 gfx_queue.clone(),
-                &memory_allocator,
+                memory_allocator.clone(),
                 command_buffer_allocator.clone(),
                 descriptor_set_allocator.clone(),
                 image_format,

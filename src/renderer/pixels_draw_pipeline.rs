@@ -18,14 +18,19 @@ use vulkano::command_buffer::{
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::device::Queue;
-use vulkano::image::ImageViewAbstract;
-use vulkano::memory::allocator::{AllocationCreateInfo, MemoryAllocator, MemoryUsage};
-use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
-use vulkano::pipeline::graphics::vertex_input::Vertex;
-use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
-use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
+use vulkano::image::sampler::{Sampler, SamplerCreateInfo};
+use vulkano::image::view::ImageView;
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryAllocator, MemoryTypeFilter};
+use vulkano::pipeline::graphics::color_blend::ColorBlendState;
+use vulkano::pipeline::graphics::vertex_input::{Vertex, VertexDefinition};
+use vulkano::pipeline::graphics::viewport::Viewport;
+use vulkano::pipeline::graphics::GraphicsPipelineCreateInfo;
+use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
+use vulkano::pipeline::{
+    DynamicState, GraphicsPipeline, Pipeline, PipelineBindPoint, PipelineLayout,
+    PipelineShaderStageCreateInfo,
+};
 use vulkano::render_pass::Subpass;
-use vulkano::sampler::{Sampler, SamplerCreateInfo};
 
 /// Vertex for textured quads
 #[repr(C)]
@@ -76,19 +81,20 @@ impl PixelsDrawPipeline {
     pub fn new(
         gfx_queue: Arc<Queue>,
         subpass: Subpass,
-        memory_allocator: &impl MemoryAllocator,
+        memory_allocator: Arc<dyn MemoryAllocator>,
         command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
         descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     ) -> PixelsDrawPipeline {
         let (vertices, indices) = textured_quad(2.0, 2.0);
         let vertex_buffer = Buffer::from_iter(
-            memory_allocator,
+            memory_allocator.clone(),
             BufferCreateInfo {
                 usage: BufferUsage::VERTEX_BUFFER,
                 ..Default::default()
             },
             AllocationCreateInfo {
-                usage: MemoryUsage::Upload,
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                 ..Default::default()
             },
             vertices.into_iter(),
@@ -101,7 +107,8 @@ impl PixelsDrawPipeline {
                 ..Default::default()
             },
             AllocationCreateInfo {
-                usage: MemoryUsage::Upload,
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                 ..Default::default()
             },
             indices.into_iter(),
@@ -109,17 +116,53 @@ impl PixelsDrawPipeline {
         .unwrap();
 
         let pipeline = {
-            let vs = vs::load(gfx_queue.device().clone()).expect("failed to create shader module");
-            let fs = fs::load(gfx_queue.device().clone()).expect("failed to create shader module");
-            GraphicsPipeline::start()
-                .vertex_input_state(TexturedVertex::per_vertex())
-                .vertex_shader(vs.entry_point("main").unwrap(), ())
-                .input_assembly_state(InputAssemblyState::new())
-                .fragment_shader(fs.entry_point("main").unwrap(), ())
-                .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
-                .render_pass(subpass.clone())
-                .build(gfx_queue.device().clone())
-                .unwrap()
+            let device = gfx_queue.device().clone();
+
+            let vs = vs::load(device.clone())
+                .expect("failed to create shader module")
+                .entry_point("main")
+                .unwrap();
+            let fs = fs::load(device.clone())
+                .expect("failed to create shader module")
+                .entry_point("main")
+                .unwrap();
+
+            let vertex_input_state = TexturedVertex::per_vertex()
+                .definition(&vs.info().input_interface)
+                .unwrap();
+            let stages = [
+                PipelineShaderStageCreateInfo::new(vs),
+                PipelineShaderStageCreateInfo::new(fs),
+            ];
+            let layout = PipelineLayout::new(
+                device.clone(),
+                PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages)
+                    .into_pipeline_layout_create_info(device.clone())
+                    .unwrap(),
+            )
+            .unwrap();
+
+            GraphicsPipeline::new(
+                device.clone(),
+                None,
+                GraphicsPipelineCreateInfo {
+                    stages: stages.into_iter().collect(),
+                    vertex_input_state: Some(vertex_input_state),
+                    input_assembly_state: Some(Default::default()),
+                    // TODO: .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
+                    viewport_state: Some(Default::default()),
+                    rasterization_state: Some(Default::default()),
+                    multisample_state: Some(Default::default()),
+                    color_blend_state: Some(ColorBlendState::with_attachment_states(
+                        subpass.num_color_attachments(),
+                        Default::default(),
+                    )),
+                    dynamic_state: [DynamicState::Viewport].into_iter().collect(),
+                    subpass: Some(subpass.clone().into()),
+                    ..GraphicsPipelineCreateInfo::layout(layout)
+                },
+            )
+            .unwrap()
         };
         PixelsDrawPipeline {
             gfx_queue,
@@ -132,10 +175,7 @@ impl PixelsDrawPipeline {
         }
     }
 
-    fn create_descriptor_set(
-        &self,
-        image: Arc<dyn ImageViewAbstract>,
-    ) -> Arc<PersistentDescriptorSet> {
+    fn create_descriptor_set(&self, image: Arc<ImageView>) -> Arc<PersistentDescriptorSet> {
         let layout = self.pipeline.layout().set_layouts().get(0).unwrap();
         let sampler = Sampler::new(
             self.gfx_queue.device().clone(),
@@ -151,6 +191,7 @@ impl PixelsDrawPipeline {
                 image.clone(),
                 sampler,
             )],
+            [],
         )
         .unwrap()
     }
@@ -159,10 +200,10 @@ impl PixelsDrawPipeline {
     pub fn draw(
         &mut self,
         viewport_dimensions: [u32; 2],
-        image: Arc<dyn ImageViewAbstract>,
-    ) -> SecondaryAutoCommandBuffer {
+        image: Arc<ImageView>,
+    ) -> Arc<SecondaryAutoCommandBuffer> {
         let mut builder = AutoCommandBufferBuilder::secondary(
-            &self.command_buffer_allocator,
+            self.command_buffer_allocator.as_ref(),
             self.gfx_queue.queue_family_index(),
             CommandBufferUsage::MultipleSubmit,
             CommandBufferInheritanceInfo {
@@ -176,20 +217,27 @@ impl PixelsDrawPipeline {
             .set_viewport(
                 0,
                 [Viewport {
-                    origin: [0.0, 0.0],
-                    dimensions: [viewport_dimensions[0] as f32, viewport_dimensions[1] as f32],
-                    depth_range: 0.0..1.0,
-                }],
+                    offset: [0.0, 0.0],
+                    extent: [viewport_dimensions[0] as f32, viewport_dimensions[1] as f32],
+                    depth_range: 0.0..=1.0,
+                }]
+                .into_iter()
+                .collect(),
             )
+            .unwrap()
             .bind_pipeline_graphics(self.pipeline.clone())
+            .unwrap()
             .bind_descriptor_sets(
                 PipelineBindPoint::Graphics,
                 self.pipeline.layout().clone(),
                 0,
                 desc_set,
             )
+            .unwrap()
             .bind_vertex_buffers(0, self.vertices.clone())
+            .unwrap()
             .bind_index_buffer(self.indices.clone())
+            .unwrap()
             .draw_indexed(self.indices.len() as u32, 1, 0, 0, 0)
             .unwrap();
         builder.build().unwrap()

@@ -10,19 +10,18 @@
 use std::sync::Arc;
 
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
-use vulkano::command_buffer::RenderPassBeginInfo;
+use vulkano::command_buffer::{RenderPassBeginInfo, SubpassBeginInfo};
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
+use vulkano::image::view::ImageView;
 use vulkano::memory::allocator::MemoryAllocator;
 use vulkano::render_pass::FramebufferCreateInfo;
 use vulkano::{
     command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, SubpassContents},
     device::Queue,
     format::Format,
-    image::ImageAccess,
     render_pass::{Framebuffer, RenderPass, Subpass},
     sync::GpuFuture,
 };
-use vulkano_util::renderer::{DeviceImageView, SwapchainImageView};
 
 use crate::renderer::pixels_draw_pipeline::PixelsDrawPipeline;
 
@@ -37,7 +36,7 @@ pub struct RenderPassPlaceOverFrame {
 impl RenderPassPlaceOverFrame {
     pub fn new(
         gfx_queue: Arc<Queue>,
-        memory_allocator: &impl MemoryAllocator,
+        memory_allocator: Arc<dyn MemoryAllocator>,
         command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
         descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
         output_format: Format,
@@ -45,15 +44,15 @@ impl RenderPassPlaceOverFrame {
         let render_pass = vulkano::single_pass_renderpass!(gfx_queue.device().clone(),
             attachments: {
                 color: {
-                    load: Clear,
-                    store: Store,
                     format: output_format,
                     samples: 1,
+                    load_op: Clear,
+                    store_op: Store,
                 }
             },
             pass: {
-                    color: [color],
-                    depth_stencil: {}
+                color: [color],
+                depth_stencil: {}
             }
         )
         .unwrap();
@@ -78,14 +77,15 @@ impl RenderPassPlaceOverFrame {
     pub fn render<F>(
         &mut self,
         before_future: F,
-        view: DeviceImageView,
-        target: SwapchainImageView,
+        view: Arc<ImageView>,
+        target: Arc<ImageView>,
     ) -> Box<dyn GpuFuture>
     where
         F: GpuFuture + 'static,
     {
         // Get dimensions
-        let img_dims = target.image().dimensions();
+        let [width, height, _] = target.image().extent();
+
         // Create framebuffer (must be in same order as render pass description in `new`
         let framebuffer = Framebuffer::new(
             self.render_pass.clone(),
@@ -95,6 +95,7 @@ impl RenderPassPlaceOverFrame {
             },
         )
         .unwrap();
+
         // Create primary command buffer builder
         let mut command_buffer_builder = AutoCommandBufferBuilder::primary(
             &self.command_buffer_allocator,
@@ -102,6 +103,7 @@ impl RenderPassPlaceOverFrame {
             CommandBufferUsage::OneTimeSubmit,
         )
         .unwrap();
+
         // Begin render pass
         command_buffer_builder
             .begin_render_pass(
@@ -109,19 +111,27 @@ impl RenderPassPlaceOverFrame {
                     clear_values: vec![Some([0.0; 4].into())],
                     ..RenderPassBeginInfo::framebuffer(framebuffer)
                 },
-                SubpassContents::SecondaryCommandBuffers,
+                SubpassBeginInfo {
+                    contents: SubpassContents::SecondaryCommandBuffers,
+                    ..Default::default()
+                },
             )
             .unwrap();
+
         // Create secondary command buffer from texture pipeline & send draw commands
-        let cb = self
-            .pixels_draw_pipeline
-            .draw(img_dims.width_height(), view);
+        let cb = self.pixels_draw_pipeline.draw([width, height], view);
+
         // Execute above commands (subpass)
         command_buffer_builder.execute_commands(cb).unwrap();
+
         // End render pass
-        command_buffer_builder.end_render_pass().unwrap();
+        command_buffer_builder
+            .end_render_pass(Default::default())
+            .unwrap();
+
         // Build command buffer
         let command_buffer = command_buffer_builder.build().unwrap();
+
         // Execute primary command buffer
         let after_future = before_future
             .then_execute(self.gfx_queue.clone(), command_buffer)

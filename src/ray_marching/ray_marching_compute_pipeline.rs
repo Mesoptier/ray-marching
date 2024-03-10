@@ -9,12 +9,15 @@ use vulkano::command_buffer::{
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::device::Queue;
-use vulkano::image::ImageAccess;
-use vulkano::memory::allocator::{MemoryUsage, StandardMemoryAllocator};
-use vulkano::pipeline::{ComputePipeline, Pipeline, PipelineBindPoint};
+use vulkano::image::view::ImageView;
+use vulkano::memory::allocator::{MemoryTypeFilter, StandardMemoryAllocator};
+use vulkano::pipeline::compute::ComputePipelineCreateInfo;
+use vulkano::pipeline::layout::PipelineDescriptorSetLayoutCreateInfo;
+use vulkano::pipeline::{
+    ComputePipeline, Pipeline, PipelineBindPoint, PipelineLayout, PipelineShaderStageCreateInfo,
+};
 use vulkano::sync::GpuFuture;
 use vulkano::DeviceSize;
-use vulkano_util::renderer::DeviceImageView;
 
 use crate::ray_marching::csg::builder::CSGCommandBufferBuilder;
 use crate::ray_marching::csg::operations::subtraction::Subtraction;
@@ -44,13 +47,24 @@ impl RayMarchingComputePipeline {
         descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     ) -> Self {
         let pipeline = {
-            let cs = cs::load(gfx_queue.device().clone()).unwrap();
+            let device = gfx_queue.device().clone();
+            let cs = cs::load(device.clone())
+                .unwrap()
+                .entry_point("main")
+                .unwrap();
+            let stage = PipelineShaderStageCreateInfo::new(cs);
+            let layout = PipelineLayout::new(
+                device.clone(),
+                PipelineDescriptorSetLayoutCreateInfo::from_stages([&stage])
+                    .into_pipeline_layout_create_info(device.clone())
+                    .unwrap(),
+            )
+            .unwrap();
+
             ComputePipeline::new(
-                gfx_queue.device().clone(),
-                cs.entry_point("main").unwrap(),
-                &(),
+                device.clone(),
                 None,
-                |_| {},
+                ComputePipelineCreateInfo::stage_layout(stage, layout),
             )
             .unwrap()
         };
@@ -59,7 +73,8 @@ impl RayMarchingComputePipeline {
             memory_allocator.clone(),
             SubbufferAllocatorCreateInfo {
                 buffer_usage: BufferUsage::STORAGE_BUFFER,
-                memory_usage: MemoryUsage::Upload,
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                 ..Default::default()
             },
         );
@@ -73,8 +88,8 @@ impl RayMarchingComputePipeline {
         }
     }
 
-    pub fn compute(&mut self, image: DeviceImageView, t: f32) -> Box<dyn GpuFuture> {
-        let dimensions = image.image().dimensions().width_height();
+    pub fn compute(&mut self, image: Arc<ImageView>, t: f32) -> Box<dyn GpuFuture> {
+        let [width, height, _] = image.image().extent();
 
         // Fill CSG buffers
         let node = Subtraction {
@@ -121,6 +136,7 @@ impl RayMarchingComputePipeline {
                 WriteDescriptorSet::buffer(1, csg_commands_buffer.clone()),
                 WriteDescriptorSet::buffer(2, csg_params_buffer.clone()),
             ],
+            [],
         )
         .unwrap();
 
@@ -141,9 +157,12 @@ impl RayMarchingComputePipeline {
 
         builder
             .bind_pipeline_compute(self.pipeline.clone())
+            .unwrap()
             .bind_descriptor_sets(PipelineBindPoint::Compute, pipeline_layout.clone(), 0, set)
+            .unwrap()
             .push_constants(pipeline_layout.clone(), 0, push_constants)
-            .dispatch([dimensions[0] / 8, dimensions[1] / 8, 1])
+            .unwrap()
+            .dispatch([width / 8, height / 8, 1])
             .unwrap();
 
         // Build and execute commands
