@@ -1,3 +1,4 @@
+use egui_winit_vulkano::Gui;
 use std::time::{Duration, Instant};
 
 use vulkano::image::ImageUsage;
@@ -18,11 +19,20 @@ fn main() {
     let event_loop = EventLoop::new();
 
     let mut windows = VulkanoWindows::default();
-    let _primary_window_id = windows.create_window(
+    let primary_window_id = windows.create_window(
         &event_loop,
         &context,
         &WindowDescriptor {
             title: "Ray Marching Demo".into(),
+            ..Default::default()
+        },
+        |_| {},
+    );
+    let gui_window_id = windows.create_window(
+        &event_loop,
+        &context,
+        &WindowDescriptor {
+            title: "GUI".into(),
             ..Default::default()
         },
         |_| {},
@@ -42,6 +52,15 @@ fn main() {
         primary_window_renderer.swapchain_format(),
     );
 
+    let gui_window_renderer = windows.get_renderer(gui_window_id).unwrap();
+    let mut gui = Gui::new(
+        &event_loop,
+        gui_window_renderer.surface(),
+        gui_window_renderer.graphics_queue(),
+        gui_window_renderer.swapchain_format(),
+        Default::default(),
+    );
+
     let start_time = Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
@@ -55,16 +74,20 @@ fn main() {
                 let next_frame_time = Instant::now() + Duration::from_nanos(16_666_667);
                 *control_flow = ControlFlow::WaitUntil(next_frame_time);
             }
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => {
-                *control_flow = ControlFlow::Exit;
+            Event::WindowEvent { event, window_id } => {
+                if window_id == gui_window_id {
+                    gui.update(&event);
+                }
+                if window_id == primary_window_id {
+                    match event {
+                        WindowEvent::CloseRequested => {
+                            *control_flow = ControlFlow::Exit;
+                        }
+                        WindowEvent::Resized(..) => primary_window_renderer.resize(),
+                        _ => {}
+                    }
+                }
             }
-            Event::WindowEvent {
-                event: WindowEvent::Resized(..),
-                ..
-            } => primary_window_renderer.resize(),
             Event::MainEventsCleared => {
                 // Start frame
                 let before_pipeline_future = match primary_window_renderer.acquire() {
@@ -92,6 +115,24 @@ fn main() {
 
                 // Finish frame
                 primary_window_renderer.present(after_render_pass_future, true);
+            }
+            Event::RedrawRequested(window_id) => {
+                if window_id == gui_window_id {
+                    gui.immediate_ui(|gui| {
+                        let ctx = gui.context();
+
+                        egui::CentralPanel::default().show(&ctx, |ui| {
+                            ui.heading("Ray Marching Demo");
+                            ui.label("This is a simple ray marching demo using Vulkano and egui.");
+                        });
+                    });
+
+                    let gui_window_renderer = windows.get_renderer_mut(gui_window_id).unwrap();
+                    let before_future = gui_window_renderer.acquire().unwrap();
+                    let after_future = gui
+                        .draw_on_image(before_future, gui_window_renderer.swapchain_image_view());
+                    gui_window_renderer.present(after_future, true);
+                }
             }
             _ => {}
         }
