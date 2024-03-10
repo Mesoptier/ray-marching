@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use vulkano::buffer::{BufferUsage, CpuBufferPool};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryCommandBuffer};
-use vulkano::descriptor_set::PersistentDescriptorSet;
+use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::device::Queue;
 use vulkano::image::ImageAccess;
 use vulkano::pipeline::{ComputePipeline, Pipeline, PipelineBindPoint};
@@ -83,15 +83,15 @@ impl RayMarchingComputePipeline {
         // Describe layout
         let pipeline_layout = self.pipeline.layout();
         let desc_layout = pipeline_layout.descriptor_set_layouts().get(0).unwrap();
-        let mut desc_set_builder = PersistentDescriptorSet::start(desc_layout.clone());
-        desc_set_builder
-            .add_image(image.clone())
-            .unwrap()
-            .add_buffer(csg_commands_buffer)
-            .unwrap()
-            .add_buffer(csg_params_buffer)
-            .unwrap();
-        let set = desc_set_builder.build().unwrap();
+        let set = PersistentDescriptorSet::new(
+            desc_layout.clone(),
+            [
+                WriteDescriptorSet::image_view(0, image.clone()),
+                WriteDescriptorSet::buffer(1, csg_commands_buffer.clone()),
+                WriteDescriptorSet::buffer(2, csg_params_buffer.clone()),
+            ],
+        )
+        .unwrap();
 
         let push_constants = cs::ty::PushConstants {
             min_dist: 0.001f32,

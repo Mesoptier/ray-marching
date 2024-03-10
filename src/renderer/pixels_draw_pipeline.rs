@@ -8,19 +8,20 @@
 // according to those terms.
 
 use std::sync::Arc;
+
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, TypedBufferAccess};
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, SecondaryAutoCommandBuffer,
 };
-use vulkano::descriptor_set::PersistentDescriptorSet;
+use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::device::Queue;
 use vulkano::image::ImageViewAbstract;
-use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
 use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
+use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
 use vulkano::render_pass::Subpass;
-use vulkano::sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode};
+use vulkano::sampler::{Filter, Sampler, SamplerAddressMode, SamplerMipmapMode};
 
 /// Vertex for textured quads
 #[repr(C)]
@@ -72,14 +73,14 @@ impl PixelsDrawPipeline {
             false,
             vertices.into_iter(),
         )
-            .unwrap();
+        .unwrap();
         let index_buffer = CpuAccessibleBuffer::<[u32]>::from_iter(
             gfx_queue.device().clone(),
             BufferUsage::index_buffer(),
             false,
             indices.into_iter(),
         )
-            .unwrap();
+        .unwrap();
 
         let pipeline = {
             let vs = vs::load(gfx_queue.device().clone()).expect("failed to create shader module");
@@ -112,25 +113,22 @@ impl PixelsDrawPipeline {
             .descriptor_set_layouts()
             .get(0)
             .unwrap();
-        let sampler = Sampler::new(
-            self.gfx_queue.device().clone(),
-            Filter::Linear,
-            Filter::Linear,
-            MipmapMode::Linear,
-            SamplerAddressMode::Repeat,
-            SamplerAddressMode::Repeat,
-            SamplerAddressMode::Repeat,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
+        let sampler = Sampler::start(self.gfx_queue.device().clone())
+            .filter(Filter::Linear)
+            .mipmap_mode(SamplerMipmapMode::Linear)
+            .address_mode(SamplerAddressMode::Repeat)
+            .build()
+            .unwrap();
+
+        PersistentDescriptorSet::new(
+            layout.clone(),
+            [WriteDescriptorSet::image_view_sampler(
+                0,
+                image.clone(),
+                sampler,
+            )],
         )
-            .unwrap();
-        let mut desc_set_builder = PersistentDescriptorSet::start(layout.clone());
-        desc_set_builder
-            .add_sampled_image(image.clone(), sampler)
-            .unwrap();
-        desc_set_builder.build().unwrap()
+        .unwrap()
     }
 
     /// Draw input `image` over a quad of size -1.0 to 1.0
@@ -145,7 +143,7 @@ impl PixelsDrawPipeline {
             CommandBufferUsage::MultipleSubmit,
             self.pipeline.subpass().clone(),
         )
-            .unwrap();
+        .unwrap();
         let desc_set = self.create_descriptor_set(image);
         builder
             .set_viewport(

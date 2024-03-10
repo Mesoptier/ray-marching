@@ -19,7 +19,7 @@ fn main() {
         use winit::event_loop::ControlFlow;
 
         match event {
-            Event::NewEvents(sc) => {
+            Event::NewEvents(_sc) => {
                 let next_frame_time = Instant::now() + Duration::from_nanos(16_666_667);
                 *control_flow = ControlFlow::WaitUntil(next_frame_time);
             }

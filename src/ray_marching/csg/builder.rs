@@ -25,8 +25,8 @@ pub enum CSGCommandType {
 
 #[derive(Debug)]
 pub struct CSGCommandDescriptor {
-    cmd_type: CSGCommandType,
-    param_offset: u32,
+    _cmd_type: CSGCommandType,
+    _param_offset: u32,
 }
 
 pub struct CSGCommandBufferBuilder {
@@ -46,8 +46,8 @@ impl CSGCommandBufferBuilder {
     /// Must be called before pushing the command parameters.
     pub fn push_command(&mut self, cmd_type: CSGCommandType) -> &mut Self {
         self.commands.push(CSGCommandDescriptor {
-            cmd_type,
-            param_offset: self.params.len() as u32,
+            _cmd_type: cmd_type,
+            _param_offset: self.params.len() as u32,
         });
         self
     }
