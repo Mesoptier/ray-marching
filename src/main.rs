@@ -34,12 +34,7 @@ fn main() {
     primary_window_renderer.add_additional_image_view(
         render_target_id,
         DEFAULT_IMAGE_FORMAT,
-        ImageUsage {
-            sampled: true,
-            input_attachment: true,
-            storage: true,
-            ..ImageUsage::empty()
-        },
+        ImageUsage::SAMPLED | ImageUsage::INPUT_ATTACHMENT | ImageUsage::STORAGE,
     );
 
     let mut app = App::new(

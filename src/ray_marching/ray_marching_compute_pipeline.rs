@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use vulkano::buffer::{BufferUsage, CpuBufferPool};
+use vulkano::buffer::allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo};
+use vulkano::buffer::BufferUsage;
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, PrimaryCommandBufferAbstract,
@@ -12,9 +13,10 @@ use vulkano::image::ImageAccess;
 use vulkano::memory::allocator::{MemoryUsage, StandardMemoryAllocator};
 use vulkano::pipeline::{ComputePipeline, Pipeline, PipelineBindPoint};
 use vulkano::sync::GpuFuture;
+use vulkano::DeviceSize;
 use vulkano_util::renderer::DeviceImageView;
 
-use crate::ray_marching::csg::builder::{CSGCommandBufferBuilder, CSGCommandDescriptor};
+use crate::ray_marching::csg::builder::CSGCommandBufferBuilder;
 use crate::ray_marching::csg::operations::subtraction::Subtraction;
 use crate::ray_marching::csg::primitives::sphere::Sphere;
 use crate::ray_marching::csg::CSGNode;
@@ -23,19 +25,13 @@ mod cs {
     vulkano_shaders::shader! {
         ty: "compute",
         path: "src/ray_marching/ray_marching.glsl",
-        types_meta: {
-            // TODO: Remove this once vulkano-shaders adds `BufferContents` automatically
-            use bytemuck::{Pod, Zeroable};
-            #[derive(Copy, Clone, Pod, Zeroable)]
-        }
     }
 }
 
 pub struct RayMarchingComputePipeline {
     gfx_queue: Arc<Queue>,
     pipeline: Arc<ComputePipeline>,
-    csg_commands_buffer_pool: CpuBufferPool<CSGCommandDescriptor>,
-    csg_params_buffer_pool: CpuBufferPool<u32>,
+    subbuffer_allocator: SubbufferAllocator,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
     descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
 }
@@ -59,28 +55,19 @@ impl RayMarchingComputePipeline {
             .unwrap()
         };
 
-        let csg_commands_buffer_pool = CpuBufferPool::new(
+        let subbuffer_allocator = SubbufferAllocator::new(
             memory_allocator.clone(),
-            BufferUsage {
-                storage_buffer: true,
-                ..BufferUsage::empty()
+            SubbufferAllocatorCreateInfo {
+                buffer_usage: BufferUsage::STORAGE_BUFFER,
+                memory_usage: MemoryUsage::Upload,
+                ..Default::default()
             },
-            MemoryUsage::Upload,
-        );
-        let csg_params_buffer_pool = CpuBufferPool::new(
-            memory_allocator.clone(),
-            BufferUsage {
-                storage_buffer: true,
-                ..BufferUsage::empty()
-            },
-            MemoryUsage::Upload,
         );
 
         Self {
             gfx_queue,
             pipeline,
-            csg_commands_buffer_pool,
-            csg_params_buffer_pool,
+            subbuffer_allocator,
             command_buffer_allocator,
             descriptor_set_allocator,
         }
@@ -106,13 +93,22 @@ impl RayMarchingComputePipeline {
         let cmd_count = builder.commands.len() as u32;
 
         let csg_commands_buffer = self
-            .csg_commands_buffer_pool
-            .from_iter(builder.commands)
+            .subbuffer_allocator
+            .allocate_slice(builder.commands.len() as DeviceSize)
             .unwrap();
+        csg_commands_buffer
+            .write()
+            .unwrap()
+            .copy_from_slice(&builder.commands);
+
         let csg_params_buffer = self
-            .csg_params_buffer_pool
-            .from_iter(builder.params)
+            .subbuffer_allocator
+            .allocate_slice(builder.params.len() as DeviceSize)
             .unwrap();
+        csg_params_buffer
+            .write()
+            .unwrap()
+            .copy_from_slice(&builder.params);
 
         // Describe layout
         let pipeline_layout = self.pipeline.layout();
@@ -128,7 +124,7 @@ impl RayMarchingComputePipeline {
         )
         .unwrap();
 
-        let push_constants = cs::ty::PushConstants {
+        let push_constants = cs::PushConstants {
             min_dist: 0.001f32,
             max_dist: 100f32,
             cmd_count,

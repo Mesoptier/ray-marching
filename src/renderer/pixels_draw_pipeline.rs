@@ -9,8 +9,7 @@
 
 use std::sync::Arc;
 
-use bytemuck::{Pod, Zeroable};
-use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, TypedBufferAccess};
+use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
 use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage,
@@ -20,9 +19,9 @@ use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::device::Queue;
 use vulkano::image::ImageViewAbstract;
-use vulkano::memory::allocator::MemoryAllocator;
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryAllocator, MemoryUsage};
 use vulkano::pipeline::graphics::input_assembly::InputAssemblyState;
-use vulkano::pipeline::graphics::vertex_input::BuffersDefinition;
+use vulkano::pipeline::graphics::vertex_input::Vertex;
 use vulkano::pipeline::graphics::viewport::{Viewport, ViewportState};
 use vulkano::pipeline::{GraphicsPipeline, Pipeline, PipelineBindPoint};
 use vulkano::render_pass::Subpass;
@@ -30,12 +29,13 @@ use vulkano::sampler::{Sampler, SamplerCreateInfo};
 
 /// Vertex for textured quads
 #[repr(C)]
-#[derive(Default, Debug, Clone, Copy, Zeroable, Pod)]
+#[derive(BufferContents, Vertex)]
 pub struct TexturedVertex {
+    #[format(R32G32_SFLOAT)]
     pub position: [f32; 2],
+    #[format(R32G32_SFLOAT)]
     pub tex_coords: [f32; 2],
 }
-vulkano::impl_vertex!(TexturedVertex, position, tex_coords);
 
 pub fn textured_quad(width: f32, height: f32) -> (Vec<TexturedVertex>, Vec<u32>) {
     (
@@ -68,8 +68,8 @@ pub struct PixelsDrawPipeline {
     pipeline: Arc<GraphicsPipeline>,
     command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
     descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
-    vertices: Arc<CpuAccessibleBuffer<[TexturedVertex]>>,
-    indices: Arc<CpuAccessibleBuffer<[u32]>>,
+    vertices: Subbuffer<[TexturedVertex]>,
+    indices: Subbuffer<[u32]>,
 }
 
 impl PixelsDrawPipeline {
@@ -81,23 +81,29 @@ impl PixelsDrawPipeline {
         descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     ) -> PixelsDrawPipeline {
         let (vertices, indices) = textured_quad(2.0, 2.0);
-        let vertex_buffer = CpuAccessibleBuffer::<[TexturedVertex]>::from_iter(
+        let vertex_buffer = Buffer::from_iter(
             memory_allocator,
-            BufferUsage {
-                vertex_buffer: true,
-                ..BufferUsage::empty()
+            BufferCreateInfo {
+                usage: BufferUsage::VERTEX_BUFFER,
+                ..Default::default()
             },
-            false,
+            AllocationCreateInfo {
+                usage: MemoryUsage::Upload,
+                ..Default::default()
+            },
             vertices.into_iter(),
         )
         .unwrap();
-        let index_buffer = CpuAccessibleBuffer::<[u32]>::from_iter(
+        let index_buffer = Buffer::from_iter(
             memory_allocator,
-            BufferUsage {
-                index_buffer: true,
-                ..BufferUsage::empty()
+            BufferCreateInfo {
+                usage: BufferUsage::INDEX_BUFFER,
+                ..Default::default()
             },
-            false,
+            AllocationCreateInfo {
+                usage: MemoryUsage::Upload,
+                ..Default::default()
+            },
             indices.into_iter(),
         )
         .unwrap();
@@ -106,7 +112,7 @@ impl PixelsDrawPipeline {
             let vs = vs::load(gfx_queue.device().clone()).expect("failed to create shader module");
             let fs = fs::load(gfx_queue.device().clone()).expect("failed to create shader module");
             GraphicsPipeline::start()
-                .vertex_input_state(BuffersDefinition::new().vertex::<TexturedVertex>())
+                .vertex_input_state(TexturedVertex::per_vertex())
                 .vertex_shader(vs.entry_point("main").unwrap(), ())
                 .input_assembly_state(InputAssemblyState::new())
                 .fragment_shader(fs.entry_point("main").unwrap(), ())
