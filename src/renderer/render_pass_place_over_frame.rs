@@ -9,6 +9,7 @@
 
 use std::sync::Arc;
 
+use vulkano::command_buffer::RenderPassBeginInfo;
 use vulkano::render_pass::FramebufferCreateInfo;
 use vulkano::{
     command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, SubpassContents},
@@ -87,9 +88,11 @@ impl RenderPassPlaceOverFrame {
         // Begin render pass
         command_buffer_builder
             .begin_render_pass(
-                framebuffer,
+                RenderPassBeginInfo {
+                    clear_values: vec![Some([0.0; 4].into())],
+                    ..RenderPassBeginInfo::framebuffer(framebuffer)
+                },
                 SubpassContents::SecondaryCommandBuffers,
-                vec![[0.0; 4].into()],
             )
             .unwrap();
         // Create secondary command buffer from texture pipeline & send draw commands

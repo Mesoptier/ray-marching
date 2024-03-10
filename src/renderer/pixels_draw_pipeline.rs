@@ -12,7 +12,8 @@ use std::sync::Arc;
 use bytemuck::{Pod, Zeroable};
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, TypedBufferAccess};
 use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferUsage, SecondaryAutoCommandBuffer,
+    AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage,
+    SecondaryAutoCommandBuffer,
 };
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::device::Queue;
@@ -60,6 +61,7 @@ pub fn textured_quad(width: f32, height: f32) -> (Vec<TexturedVertex>, Vec<u32>)
 /// A subpass pipeline that fills a quad over frame
 pub struct PixelsDrawPipeline {
     gfx_queue: Arc<Queue>,
+    subpass: Subpass,
     pipeline: Arc<GraphicsPipeline>,
     vertices: Arc<CpuAccessibleBuffer<[TexturedVertex]>>,
     indices: Arc<CpuAccessibleBuffer<[u32]>>,
@@ -92,12 +94,13 @@ impl PixelsDrawPipeline {
                 .input_assembly_state(InputAssemblyState::new())
                 .fragment_shader(fs.entry_point("main").unwrap(), ())
                 .viewport_state(ViewportState::viewport_dynamic_scissor_irrelevant())
-                .render_pass(subpass)
+                .render_pass(subpass.clone())
                 .build(gfx_queue.device().clone())
                 .unwrap()
         };
         PixelsDrawPipeline {
             gfx_queue,
+            subpass,
             pipeline,
             vertices: vertex_buffer,
             indices: index_buffer,
@@ -132,11 +135,14 @@ impl PixelsDrawPipeline {
         viewport_dimensions: [u32; 2],
         image: Arc<dyn ImageViewAbstract>,
     ) -> SecondaryAutoCommandBuffer {
-        let mut builder = AutoCommandBufferBuilder::secondary_graphics(
+        let mut builder = AutoCommandBufferBuilder::secondary(
             self.gfx_queue.device().clone(),
             self.gfx_queue.family(),
             CommandBufferUsage::MultipleSubmit,
-            self.pipeline.subpass().clone(),
+            CommandBufferInheritanceInfo {
+                render_pass: Some(self.subpass.clone().into()),
+                ..Default::default()
+            },
         )
         .unwrap();
         let desc_set = self.create_descriptor_set(image);
