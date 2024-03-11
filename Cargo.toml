@@ -9,11 +9,12 @@ edition = "2021"
 debug = true
 
 [dependencies]
-bytemuck = "1.14.3"
-egui = "0.24.1"
-egui_winit_vulkano = "0.27.0"
-vulkano = "0.34.1"
-vulkano-shaders = "0.34.0"
-vulkano-util = "0.34.1"
-vulkano-win = "0.34.0"
-winit = "0.28.7"
+bytemuck = "1.14"
+egui = "0.24"
+egui_node_graph = { git = "https://github.com/SergioRibera/egui_node_graph.git", version = "0.4.0", rev = "b315264d9f92417082b090cd1985135d65bad893" }
+egui_winit_vulkano = "0.27"
+vulkano = "0.34"
+vulkano-shaders = "0.34"
+vulkano-util = "0.34"
+vulkano-win = "0.34"
+winit = "0.28"

@@ -418,6 +418,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "egui_node_graph"
+version = "0.4.0"
+source = "git+https://github.com/SergioRibera/egui_node_graph.git?rev=b315264d9f92417082b090cd1985135d65bad893#b315264d9f92417082b090cd1985135d65bad893"
+dependencies = [
+ "egui",
+ "slotmap",
+ "smallvec",
+ "thiserror",
+]
+
+[[package]]
 name = "egui_winit_vulkano"
 version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1134,6 +1145,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "egui",
+ "egui_node_graph",
  "egui_winit_vulkano",
  "vulkano",
  "vulkano-shaders",

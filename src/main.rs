@@ -1,6 +1,6 @@
-use egui_winit_vulkano::Gui;
 use std::time::{Duration, Instant};
 
+use egui_winit_vulkano::Gui;
 use vulkano::image::ImageUsage;
 use vulkano::sync::GpuFuture;
 use vulkano_util::context::{VulkanoConfig, VulkanoContext};
@@ -11,6 +11,7 @@ use winit::event_loop::EventLoop;
 use crate::app::App;
 
 mod app;
+mod gui;
 mod ray_marching;
 mod renderer;
 
@@ -60,6 +61,8 @@ fn main() {
         gui_window_renderer.swapchain_format(),
         Default::default(),
     );
+
+    let mut graph_gui = gui::Gui::default();
 
     let start_time = Instant::now();
 
@@ -115,6 +118,10 @@ fn main() {
 
                 // Finish frame
                 primary_window_renderer.present(after_render_pass_future, true);
+
+                // TODO: Should this be called every MainEventsCleared?
+                let gui_window_renderer = windows.get_renderer(gui_window_id).unwrap();
+                gui_window_renderer.window().request_redraw();
             }
             Event::RedrawRequested(window_id) => {
                 if window_id == gui_window_id {
@@ -122,8 +129,7 @@ fn main() {
                         let ctx = gui.context();
 
                         egui::CentralPanel::default().show(&ctx, |ui| {
-                            ui.heading("Ray Marching Demo");
-                            ui.label("This is a simple ray marching demo using Vulkano and egui.");
+                            graph_gui.draw(ui);
                         });
                     });
 
