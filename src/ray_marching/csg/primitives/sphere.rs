@@ -1,5 +1,5 @@
 use crate::ray_marching::csg::builder::{CSGCommandBufferBuilder, CSGCommandType};
-use crate::ray_marching::csg::CSGNode;
+use crate::ray_marching::csg::BuildCommands;
 
 pub struct Sphere {
     // TODO: Remove center in favor of just adding a Translation node
@@ -7,7 +7,7 @@ pub struct Sphere {
     pub(crate) radius: f32,
 }
 
-impl CSGNode for Sphere {
+impl BuildCommands for Sphere {
     fn build_commands(&self, builder: &mut CSGCommandBufferBuilder) {
         builder
             .push_command(CSGCommandType::Sphere)

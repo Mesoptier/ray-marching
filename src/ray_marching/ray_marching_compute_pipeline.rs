@@ -22,7 +22,7 @@ use vulkano::DeviceSize;
 use crate::ray_marching::csg::builder::CSGCommandBufferBuilder;
 use crate::ray_marching::csg::operations::subtraction::Subtraction;
 use crate::ray_marching::csg::primitives::sphere::Sphere;
-use crate::ray_marching::csg::CSGNode;
+use crate::ray_marching::csg::{BuildCommands, CSGNode};
 
 mod cs {
     vulkano_shaders::shader! {
@@ -92,16 +92,16 @@ impl RayMarchingComputePipeline {
         let [width, height, _] = image.image().extent();
 
         // Fill CSG buffers
-        let node = Subtraction {
-            p1: Box::new(Sphere {
+        let node = CSGNode::Subtraction(Subtraction {
+            p1: Box::new(CSGNode::Sphere(Sphere {
                 radius: 1.0,
                 center: [0.0, 0.0, 0.0],
-            }),
-            p2: Box::new(Sphere {
+            })),
+            p2: Box::new(CSGNode::Sphere(Sphere {
                 radius: 1.0,
                 center: [(t / 20.0).sin(), -(t / 20.0).sin(), (t / 20.0).cos()],
-            }),
-        };
+            })),
+        });
         let mut builder = CSGCommandBufferBuilder::new();
         node.build_commands(&mut builder);
 
