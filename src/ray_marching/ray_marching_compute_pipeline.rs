@@ -20,9 +20,7 @@ use vulkano::sync::GpuFuture;
 use vulkano::DeviceSize;
 
 use crate::ray_marching::csg::builder::CSGCommandBufferBuilder;
-use crate::ray_marching::csg::operations::subtraction::Subtraction;
-use crate::ray_marching::csg::primitives::sphere::Sphere;
-use crate::ray_marching::csg::{BuildCommands, CSGNode};
+use crate::ray_marching::csg::{BuildCommands, CSGNode, Sphere, Subtraction};
 
 mod cs {
     vulkano_shaders::shader! {

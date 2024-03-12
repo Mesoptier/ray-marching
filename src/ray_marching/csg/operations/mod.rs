@@ -1,2 +1,5 @@
-pub mod union;
-pub mod subtraction;
+pub use subtraction::*;
+pub use union::*;
+
+mod subtraction;
+mod union;

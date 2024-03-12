@@ -1,13 +1,13 @@
 use enum_dispatch::enum_dispatch;
 
 use crate::ray_marching::csg::builder::CSGCommandBufferBuilder;
-use crate::ray_marching::csg::operations::subtraction::Subtraction;
-use crate::ray_marching::csg::operations::union::Union;
-use crate::ray_marching::csg::primitives::sphere::Sphere;
 
 pub(crate) mod builder;
-pub(crate) mod operations;
-pub(crate) mod primitives;
+mod operations;
+mod primitives;
+
+pub use operations::*;
+pub use primitives::*;
 
 #[enum_dispatch]
 pub trait BuildCommands {
