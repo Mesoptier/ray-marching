@@ -15,6 +15,7 @@ pub trait BuildCommands {
 }
 
 #[enum_dispatch(BuildCommands)]
+#[derive(Debug, Clone)]
 pub enum CSGNode {
     // Primitives
     Sphere,

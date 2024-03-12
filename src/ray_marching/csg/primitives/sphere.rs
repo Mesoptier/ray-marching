@@ -1,6 +1,7 @@
 use crate::ray_marching::csg::builder::{CSGCommandBufferBuilder, CSGCommandType};
 use crate::ray_marching::csg::BuildCommands;
 
+#[derive(Debug, Clone)]
 pub struct Sphere {
     // TODO: Remove center in favor of just adding a Translation node
     pub(crate) center: [f32; 3],

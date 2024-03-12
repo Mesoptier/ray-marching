@@ -62,8 +62,6 @@ fn main() {
         Default::default(),
     );
 
-    let mut graph_gui = gui::Gui::default();
-
     let start_time = Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
@@ -106,7 +104,6 @@ fn main() {
                     primary_window_renderer.get_additional_image_view(render_target_id);
 
                 let compute_future = app
-                    .compute_pipeline
                     .compute(render_target.clone(), start_time.elapsed().as_secs_f32())
                     .join(before_pipeline_future);
 
@@ -129,7 +126,7 @@ fn main() {
                         let ctx = gui.context();
 
                         egui::CentralPanel::default().show(&ctx, |ui| {
-                            graph_gui.draw(ui);
+                            app.gui.draw(ui);
                         });
                     });
 

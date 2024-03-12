@@ -1,12 +1,15 @@
 use std::sync::Arc;
 
+use crate::gui::Gui;
 use vulkano::command_buffer::allocator::{
     StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo,
 };
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::device::Queue;
 use vulkano::format::Format;
+use vulkano::image::view::ImageView;
 use vulkano::memory::allocator::StandardMemoryAllocator;
+use vulkano::sync::GpuFuture;
 
 use crate::ray_marching::ray_marching_compute_pipeline::RayMarchingComputePipeline;
 use crate::renderer::render_pass_place_over_frame::RenderPassPlaceOverFrame;
@@ -14,6 +17,7 @@ use crate::renderer::render_pass_place_over_frame::RenderPassPlaceOverFrame;
 pub(crate) struct App {
     pub render_pass: RenderPassPlaceOverFrame,
     pub compute_pipeline: RayMarchingComputePipeline,
+    pub gui: Gui,
 }
 
 impl App {
@@ -47,6 +51,12 @@ impl App {
                 command_buffer_allocator,
                 descriptor_set_allocator,
             ),
+            gui: Gui::default(),
         }
+    }
+
+    pub fn compute(&mut self, image: Arc<ImageView>, t: f32) -> Box<dyn GpuFuture> {
+        let node = self.gui.evaluate_root();
+        self.compute_pipeline.compute(image, t, node)
     }
 }

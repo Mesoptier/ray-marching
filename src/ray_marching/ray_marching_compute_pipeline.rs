@@ -17,10 +17,9 @@ use vulkano::pipeline::{
     ComputePipeline, Pipeline, PipelineBindPoint, PipelineLayout, PipelineShaderStageCreateInfo,
 };
 use vulkano::sync::GpuFuture;
-use vulkano::DeviceSize;
 
 use crate::ray_marching::csg::builder::CSGCommandBufferBuilder;
-use crate::ray_marching::csg::{BuildCommands, CSGNode, Sphere, Subtraction};
+use crate::ray_marching::csg::{BuildCommands, CSGNode};
 
 mod cs {
     vulkano_shaders::shader! {
@@ -86,42 +85,21 @@ impl RayMarchingComputePipeline {
         }
     }
 
-    pub fn compute(&mut self, image: Arc<ImageView>, t: f32) -> Box<dyn GpuFuture> {
+    pub fn compute(
+        &mut self,
+        image: Arc<ImageView>,
+        t: f32,
+        node: Option<CSGNode>,
+    ) -> Box<dyn GpuFuture> {
         let [width, height, _] = image.image().extent();
 
         // Fill CSG buffers
-        let node = CSGNode::Subtraction(Subtraction {
-            p1: Box::new(CSGNode::Sphere(Sphere {
-                radius: 1.0,
-                center: [0.0, 0.0, 0.0],
-            })),
-            p2: Box::new(CSGNode::Sphere(Sphere {
-                radius: 1.0,
-                center: [(t / 20.0).sin(), -(t / 20.0).sin(), (t / 20.0).cos()],
-            })),
-        });
         let mut builder = CSGCommandBufferBuilder::new();
-        node.build_commands(&mut builder);
-
-        let cmd_count = builder.commands.len() as u32;
-
-        let csg_commands_buffer = self
-            .subbuffer_allocator
-            .allocate_slice(builder.commands.len() as DeviceSize)
-            .unwrap();
-        csg_commands_buffer
-            .write()
-            .unwrap()
-            .copy_from_slice(&builder.commands);
-
-        let csg_params_buffer = self
-            .subbuffer_allocator
-            .allocate_slice(builder.params.len() as DeviceSize)
-            .unwrap();
-        csg_params_buffer
-            .write()
-            .unwrap()
-            .copy_from_slice(&builder.params);
+        if let Some(node) = node {
+            node.build_commands(&mut builder);
+        }
+        let (cmd_count, csg_commands_buffer, csg_params_buffer) =
+            builder.build(&self.subbuffer_allocator);
 
         // Describe layout
         let pipeline_layout = self.pipeline.layout();

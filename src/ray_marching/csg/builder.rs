@@ -1,4 +1,7 @@
 use bytemuck::{Pod, Zeroable};
+use vulkano::buffer::allocator::SubbufferAllocator;
+use vulkano::buffer::Subbuffer;
+use vulkano::DeviceSize;
 
 #[derive(Debug)]
 #[repr(u32)]
@@ -78,5 +81,34 @@ impl CSGCommandBufferBuilder {
     pub fn push_param_float(&mut self, value: f32) -> &mut Self {
         self.params.push(value.to_bits());
         self
+    }
+
+    pub fn build(
+        self,
+        subbuffer_allocator: &SubbufferAllocator,
+    ) -> (u32, Subbuffer<[CSGCommandDescriptor]>, Subbuffer<[u32]>) {
+        let cmd_count = self.commands.len() as u32;
+
+        let csg_commands_buffer = subbuffer_allocator
+            .allocate_slice(self.commands.len().max(1) as DeviceSize)
+            .unwrap();
+        if !self.commands.is_empty() {
+            csg_commands_buffer
+                .write()
+                .unwrap()
+                .copy_from_slice(&self.commands);
+        }
+
+        let csg_params_buffer = subbuffer_allocator
+            .allocate_slice(self.params.len().max(1) as DeviceSize)
+            .unwrap();
+        if !self.params.is_empty() {
+            csg_params_buffer
+                .write()
+                .unwrap()
+                .copy_from_slice(&self.params);
+        }
+
+        (cmd_count, csg_commands_buffer, csg_params_buffer)
     }
 }
