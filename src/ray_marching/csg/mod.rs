@@ -48,16 +48,16 @@ pub enum CSGNode {
 #[derive(Debug, Clone)]
 pub enum CSGNodeTemplate {
     Sphere(SphereTemplate),
-    Union(BinaryOperationTemplate<Union>),
-    Subtraction(BinaryOperationTemplate<Subtraction>),
+    Union(UnionTemplate),
+    Subtraction(SubtractionTemplate),
 }
 
 impl CSGNodeTemplate {
     pub fn all() -> impl IntoIterator<Item = Self> {
         [
             CSGNodeTemplate::Sphere(SphereTemplate),
-            CSGNodeTemplate::Union(BinaryOperationTemplate::new()),
-            CSGNodeTemplate::Subtraction(BinaryOperationTemplate::new()),
+            CSGNodeTemplate::Union(UnionTemplate),
+            CSGNodeTemplate::Subtraction(SubtractionTemplate),
         ]
     }
 }
