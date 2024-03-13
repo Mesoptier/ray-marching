@@ -11,3 +11,9 @@ impl BuildCommands for Union {
         builder.push_command(CSGCommandType::Union);
     }
 }
+
+impl From<(Box<CSGNode>, Box<CSGNode>)> for Union {
+    fn from((lhs, rhs): (Box<CSGNode>, Box<CSGNode>)) -> Self {
+        Union(lhs, rhs)
+    }
+}

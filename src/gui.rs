@@ -8,7 +8,7 @@ use egui_node_graph::{
     WidgetValueTrait,
 };
 
-use crate::ray_marching::csg::{CSGNode, Sphere, Subtraction, Union};
+use crate::ray_marching::csg::{CSGNode, CSGNodeTemplate, CSGNodeTemplateTrait};
 
 pub struct NodeData {
     template: NodeTemplate,
@@ -29,25 +29,33 @@ pub enum ValueType {
 }
 
 impl ValueType {
+    fn data_type(&self) -> DataType {
+        match self {
+            ValueType::Scalar(_) => DataType::Scalar,
+            ValueType::Vec3(_) => DataType::Vec3,
+            ValueType::CSGNode(_) => DataType::CSGNode,
+        }
+    }
+
     fn csg_node(value: impl Into<CSGNode>) -> Self {
         ValueType::CSGNode(Some(Box::new(value.into())))
     }
 
-    fn to_scalar(&self) -> Option<f32> {
+    pub(crate) fn to_scalar(&self) -> Option<f32> {
         match self {
             ValueType::Scalar(x) => Some(*x),
             _ => None,
         }
     }
 
-    fn to_vec3(&self) -> Option<[f32; 3]> {
+    pub(crate) fn to_vec3(&self) -> Option<[f32; 3]> {
         match self {
             ValueType::Vec3(x) => Some(*x),
             _ => None,
         }
     }
 
-    fn to_csg_node(&self) -> Option<CSGNode> {
+    pub(crate) fn to_csg_node(&self) -> Option<CSGNode> {
         match self {
             ValueType::CSGNode(Some(x)) => Some(*x.clone()),
             _ => None,
@@ -61,12 +69,10 @@ impl Default for ValueType {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub enum NodeTemplate {
     Root,
-    Sphere,
-    Union,
-    Subtraction,
+    CSGNode(CSGNodeTemplate),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -100,9 +106,7 @@ impl NodeTemplateTrait for NodeTemplate {
     fn node_finder_label(&self, user_state: &mut Self::UserState) -> Cow<str> {
         match self {
             NodeTemplate::Root => "Root".into(),
-            NodeTemplate::Sphere => "Sphere".into(),
-            NodeTemplate::Union => "Union".into(),
-            NodeTemplate::Subtraction => "Subtraction".into(),
+            NodeTemplate::CSGNode(template) => template.name().into(),
         }
     }
 
@@ -111,7 +115,9 @@ impl NodeTemplateTrait for NodeTemplate {
     }
 
     fn user_data(&self, _user_state: &mut Self::UserState) -> Self::NodeData {
-        NodeData { template: *self }
+        NodeData {
+            template: self.clone(),
+        }
     }
 
     fn build_node(
@@ -131,42 +137,17 @@ impl NodeTemplateTrait for NodeTemplate {
                     true,
                 );
             }
-            NodeTemplate::Sphere => {
-                graph.add_input_param(
-                    node_id,
-                    "center".to_string(),
-                    DataType::Vec3,
-                    ValueType::Vec3([0.0; 3]),
-                    InputParamKind::ConnectionOrConstant,
-                    true,
-                );
-                graph.add_input_param(
-                    node_id,
-                    "radius".to_string(),
-                    DataType::Scalar,
-                    ValueType::Scalar(1.0),
-                    InputParamKind::ConnectionOrConstant,
-                    true,
-                );
-                graph.add_output_param(node_id, "SDF".to_string(), DataType::CSGNode);
-            }
-            NodeTemplate::Union | NodeTemplate::Subtraction => {
-                graph.add_input_param(
-                    node_id,
-                    "A".to_string(),
-                    DataType::CSGNode,
-                    ValueType::CSGNode(None),
-                    InputParamKind::ConnectionOnly,
-                    true,
-                );
-                graph.add_input_param(
-                    node_id,
-                    "B".to_string(),
-                    DataType::CSGNode,
-                    ValueType::CSGNode(None),
-                    InputParamKind::ConnectionOnly,
-                    true,
-                );
+            NodeTemplate::CSGNode(template) => {
+                for (name, value_type, kind) in template.input_params() {
+                    graph.add_input_param(
+                        node_id,
+                        name.to_string(),
+                        value_type.data_type(),
+                        value_type,
+                        kind,
+                        true,
+                    );
+                }
                 graph.add_output_param(node_id, "SDF".to_string(), DataType::CSGNode);
             }
         }
@@ -178,12 +159,13 @@ impl NodeTemplateIter for AllNodeTemplates {
     type Item = NodeTemplate;
 
     fn all_kinds(&self) -> Vec<Self::Item> {
-        vec![
-            NodeTemplate::Root,
-            NodeTemplate::Sphere,
-            NodeTemplate::Union,
-            NodeTemplate::Subtraction,
-        ]
+        let mut all_templates = vec![NodeTemplate::Root];
+        all_templates.extend(
+            CSGNodeTemplate::all()
+                .into_iter()
+                .map(NodeTemplate::CSGNode),
+        );
+        all_templates
     }
 }
 
@@ -309,41 +291,18 @@ impl<'a> Evaluator<'a> {
     fn evaluate_node(&mut self, node_id: NodeId) {
         let node = &self.graph[node_id];
 
-        match node.user_data.template {
+        match &node.user_data.template {
             NodeTemplate::Root => {}
-            NodeTemplate::Sphere => {
-                let center = self
-                    .evaluate_input(node.get_input("center").unwrap())
-                    .to_vec3()
-                    .unwrap();
-                let radius = self
-                    .evaluate_input(node.get_input("radius").unwrap())
-                    .to_scalar()
-                    .unwrap();
-
-                let sdf = ValueType::csg_node(Sphere { center, radius });
-                self.output_cache
-                    .insert(node.get_output("SDF").unwrap(), Some(sdf));
-            }
-            NodeTemplate::Union | NodeTemplate::Subtraction => {
-                let a = self
-                    .evaluate_input(node.get_input("A").unwrap())
-                    .to_csg_node();
-                let b = self
-                    .evaluate_input(node.get_input("B").unwrap())
-                    .to_csg_node();
-
-                if let (Some(a), Some(b)) = (a, b) {
-                    let a = a.into();
-                    let b = b.into();
-                    let sdf = match node.user_data.template {
-                        NodeTemplate::Union => ValueType::csg_node(Union(a, b)),
-                        NodeTemplate::Subtraction => ValueType::csg_node(Subtraction(a, b)),
-                        _ => unreachable!(),
-                    };
-                    self.output_cache
-                        .insert(node.get_output("SDF").unwrap(), Some(sdf));
-                }
+            NodeTemplate::CSGNode(template) => {
+                let input_params = node
+                    .inputs
+                    .iter()
+                    .map(|(name, input_id)| (name.clone(), self.evaluate_input(*input_id)))
+                    .collect();
+                self.output_cache.insert(
+                    node.outputs[0].1,
+                    template.evaluate(input_params).map(ValueType::csg_node),
+                );
             }
         }
     }

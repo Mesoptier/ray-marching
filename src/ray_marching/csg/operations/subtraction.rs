@@ -11,3 +11,9 @@ impl BuildCommands for Subtraction {
         builder.push_command(CSGCommandType::Subtraction);
     }
 }
+
+impl From<(Box<CSGNode>, Box<CSGNode>)> for Subtraction {
+    fn from((lhs, rhs): (Box<CSGNode>, Box<CSGNode>)) -> Self {
+        Subtraction(lhs, rhs)
+    }
+}
