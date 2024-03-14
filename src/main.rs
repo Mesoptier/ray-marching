@@ -1,3 +1,4 @@
+use egui::Frame;
 use std::time::{Duration, Instant};
 
 use egui_winit_vulkano::Gui;
@@ -20,7 +21,7 @@ fn main() {
     let event_loop = EventLoop::new();
 
     let mut windows = VulkanoWindows::default();
-    let primary_window_id = windows.create_window(
+    let _primary_window_id = windows.create_window(
         &event_loop,
         &context,
         &WindowDescriptor {
@@ -29,21 +30,12 @@ fn main() {
         },
         |_| {},
     );
-    let gui_window_id = windows.create_window(
-        &event_loop,
-        &context,
-        &WindowDescriptor {
-            title: "GUI".into(),
-            ..Default::default()
-        },
-        |_| {},
-    );
 
     let primary_window_renderer = windows.get_primary_renderer_mut().unwrap();
 
-    let render_target_id = 0;
+    let scene_image_view_id = 0;
     primary_window_renderer.add_additional_image_view(
-        render_target_id,
+        scene_image_view_id,
         DEFAULT_IMAGE_FORMAT,
         ImageUsage::SAMPLED | ImageUsage::INPUT_ATTACHMENT | ImageUsage::STORAGE,
     );
@@ -53,14 +45,17 @@ fn main() {
         primary_window_renderer.swapchain_format(),
     );
 
-    let gui_window_renderer = windows.get_renderer(gui_window_id).unwrap();
     let mut gui = Gui::new(
         &event_loop,
-        gui_window_renderer.surface(),
-        gui_window_renderer.graphics_queue(),
-        gui_window_renderer.swapchain_format(),
+        primary_window_renderer.surface(),
+        primary_window_renderer.graphics_queue(),
+        primary_window_renderer.swapchain_format(),
         Default::default(),
     );
+
+    let scene_image_view = primary_window_renderer.get_additional_image_view(scene_image_view_id);
+    let scene_texture_id =
+        gui.register_user_image_view(scene_image_view.clone(), Default::default());
 
     let start_time = Instant::now();
 
@@ -75,21 +70,32 @@ fn main() {
                 let next_frame_time = Instant::now() + Duration::from_nanos(16_666_667);
                 *control_flow = ControlFlow::WaitUntil(next_frame_time);
             }
-            Event::WindowEvent { event, window_id } => {
-                if window_id == gui_window_id {
-                    gui.update(&event);
-                }
-                if window_id == primary_window_id {
-                    match event {
-                        WindowEvent::CloseRequested => {
-                            *control_flow = ControlFlow::Exit;
-                        }
-                        WindowEvent::Resized(..) => primary_window_renderer.resize(),
-                        _ => {}
+            Event::WindowEvent { event, .. } => {
+                gui.update(&event);
+
+                match event {
+                    WindowEvent::CloseRequested => {
+                        *control_flow = ControlFlow::Exit;
                     }
+                    WindowEvent::Resized(..) => primary_window_renderer.resize(),
+                    _ => {}
                 }
             }
             Event::MainEventsCleared => {
+                gui.immediate_ui(|gui| {
+                    let ctx = gui.context();
+
+                    egui::CentralPanel::default()
+                        .frame(Frame::default().inner_margin(0.))
+                        .show(&ctx, |ui| {
+                            ui.image(egui::ImageSource::Texture(egui::load::SizedTexture::new(
+                                scene_texture_id,
+                                [ui.available_width(), ui.available_height()],
+                            )));
+                            app.gui.draw(ui);
+                        });
+                });
+
                 // Start frame
                 let before_pipeline_future = match primary_window_renderer.acquire() {
                     Err(e) => {
@@ -100,42 +106,17 @@ fn main() {
                 };
 
                 // Compute & render
-                let render_target =
-                    primary_window_renderer.get_additional_image_view(render_target_id);
+                let final_image = primary_window_renderer.swapchain_image_view();
 
-                let compute_future = app
-                    .compute(render_target.clone(), start_time.elapsed().as_secs_f32())
+                let render_scene_future = app
+                    .compute(scene_image_view.clone(), start_time.elapsed().as_secs_f32())
                     .join(before_pipeline_future);
 
-                let after_render_pass_future = app.render_pass.render(
-                    compute_future,
-                    render_target,
-                    primary_window_renderer.swapchain_image_view(),
-                );
+                // Render GUI
+                let after_render_pass_future = gui.draw_on_image(render_scene_future, final_image);
 
                 // Finish frame
                 primary_window_renderer.present(after_render_pass_future, true);
-
-                // TODO: Should this be called every MainEventsCleared?
-                let gui_window_renderer = windows.get_renderer(gui_window_id).unwrap();
-                gui_window_renderer.window().request_redraw();
-            }
-            Event::RedrawRequested(window_id) => {
-                if window_id == gui_window_id {
-                    gui.immediate_ui(|gui| {
-                        let ctx = gui.context();
-
-                        egui::CentralPanel::default().show(&ctx, |ui| {
-                            app.gui.draw(ui);
-                        });
-                    });
-
-                    let gui_window_renderer = windows.get_renderer_mut(gui_window_id).unwrap();
-                    let before_future = gui_window_renderer.acquire().unwrap();
-                    let after_future = gui
-                        .draw_on_image(before_future, gui_window_renderer.swapchain_image_view());
-                    gui_window_renderer.present(after_future, true);
-                }
             }
             _ => {}
         }
