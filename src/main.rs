@@ -85,6 +85,12 @@ fn main() {
                 gui.immediate_ui(|gui| {
                     let ctx = gui.context();
 
+                    egui::TopBottomPanel::bottom("node_graph")
+                        .resizable(true)
+                        .show(&ctx, |ui| {
+                            app.gui.draw(ui);
+                        });
+
                     egui::CentralPanel::default()
                         .frame(Frame::default().inner_margin(0.))
                         .show(&ctx, |ui| {
@@ -92,7 +98,6 @@ fn main() {
                                 scene_texture_id,
                                 [ui.available_width(), ui.available_height()],
                             )));
-                            app.gui.draw(ui);
                         });
                 });
 
