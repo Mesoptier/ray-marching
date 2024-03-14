@@ -1,20 +1,20 @@
-use egui::Frame;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use egui_winit_vulkano::Gui;
-use vulkano::image::ImageUsage;
+use egui::mutex::Mutex;
+use egui::Frame;
+use egui_winit_vulkano::{CallbackFn, Gui};
 use vulkano::sync::GpuFuture;
 use vulkano_util::context::{VulkanoConfig, VulkanoContext};
-use vulkano_util::renderer::DEFAULT_IMAGE_FORMAT;
 use vulkano_util::window::{VulkanoWindows, WindowDescriptor};
 use winit::event_loop::EventLoop;
 
-use crate::app::App;
+use crate::scene::Scene;
 
-mod app;
 mod gui;
 mod ray_marching;
 mod renderer;
+mod scene;
 
 fn main() {
     let context = VulkanoContext::new(VulkanoConfig::default());
@@ -33,17 +33,7 @@ fn main() {
 
     let primary_window_renderer = windows.get_primary_renderer_mut().unwrap();
 
-    let scene_image_view_id = 0;
-    primary_window_renderer.add_additional_image_view(
-        scene_image_view_id,
-        DEFAULT_IMAGE_FORMAT,
-        ImageUsage::SAMPLED | ImageUsage::INPUT_ATTACHMENT | ImageUsage::STORAGE,
-    );
-
-    let mut app = App::new(
-        context.graphics_queue().clone(),
-        primary_window_renderer.swapchain_format(),
-    );
+    let mut node_graph = gui::Gui::default();
 
     let mut gui = Gui::new(
         &event_loop,
@@ -53,9 +43,7 @@ fn main() {
         Default::default(),
     );
 
-    let scene_image_view = primary_window_renderer.get_additional_image_view(scene_image_view_id);
-    let scene_texture_id =
-        gui.register_user_image_view(scene_image_view.clone(), Default::default());
+    let scene = Arc::new(Mutex::new(Scene::new(gui.render_resources())));
 
     let start_time = Instant::now();
 
@@ -88,17 +76,30 @@ fn main() {
                     egui::TopBottomPanel::bottom("node_graph")
                         .resizable(true)
                         .show(&ctx, |ui| {
-                            app.gui.draw(ui);
+                            node_graph.draw(ui);
                         });
 
-                    egui::CentralPanel::default()
-                        .frame(Frame::default().inner_margin(0.))
-                        .show(&ctx, |ui| {
-                            ui.image(egui::ImageSource::Texture(egui::load::SizedTexture::new(
-                                scene_texture_id,
-                                [ui.available_width(), ui.available_height()],
-                            )));
+                    egui::CentralPanel::default().show(&ctx, |ui| {
+                        Frame::canvas(ui.style()).show(ui, |ui| {
+                            let (rect, _) =
+                                ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
+
+                            scene.lock().update_extent(
+                                rect.width().round() as u32,
+                                rect.height().round() as u32,
+                            );
+
+                            let scene = scene.clone();
+                            let paint_callback = egui::PaintCallback {
+                                rect,
+                                callback: Arc::new(CallbackFn::new(move |info, ctx| {
+                                    scene.lock().render(info, ctx);
+                                })),
+                            };
+
+                            ui.painter().add(paint_callback);
                         });
+                    });
                 });
 
                 // Start frame
@@ -110,14 +111,17 @@ fn main() {
                     Ok(future) => future,
                 };
 
-                // Compute & render
-                let final_image = primary_window_renderer.swapchain_image_view();
-
-                let render_scene_future = app
-                    .compute(scene_image_view.clone(), start_time.elapsed().as_secs_f32())
+                // Compute scene
+                let render_scene_future = scene
+                    .lock()
+                    .compute(
+                        start_time.elapsed().as_secs_f32(),
+                        node_graph.evaluate_root(),
+                    )
                     .join(before_pipeline_future);
 
                 // Render GUI
+                let final_image = primary_window_renderer.swapchain_image_view();
                 let after_render_pass_future = gui.draw_on_image(render_scene_future, final_image);
 
                 // Finish frame

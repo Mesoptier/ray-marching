@@ -1,21 +1,8 @@
-// Copyright (c) 2021 The vulkano developers
-// Licensed under the Apache License, Version 2.0
-// <LICENSE-APACHE or
-// https://www.apache.org/licenses/LICENSE-2.0> or the MIT
-// license <LICENSE-MIT or https://opensource.org/licenses/MIT>,
-// at your option. All files in the project carrying such
-// notice may not be copied, modified, or distributed except
-// according to those terms.
-
 use std::sync::Arc;
 
+use egui::PaintCallbackInfo;
+use egui_winit_vulkano::{CallbackContext, RenderResources};
 use vulkano::buffer::{Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer};
-use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
-use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferInheritanceInfo, CommandBufferUsage,
-    SecondaryAutoCommandBuffer,
-};
-use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet};
 use vulkano::device::Queue;
 use vulkano::image::sampler::{Sampler, SamplerCreateInfo};
@@ -68,11 +55,7 @@ pub fn textured_quad(width: f32, height: f32) -> (Vec<TexturedVertex>, Vec<u32>)
 
 /// A subpass pipeline that fills a quad over frame
 pub struct PixelsDrawPipeline {
-    gfx_queue: Arc<Queue>,
-    subpass: Subpass,
     pipeline: Arc<GraphicsPipeline>,
-    command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
-    descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     vertices: Subbuffer<[TexturedVertex]>,
     indices: Subbuffer<[u32]>,
 }
@@ -82,8 +65,6 @@ impl PixelsDrawPipeline {
         gfx_queue: Arc<Queue>,
         subpass: Subpass,
         memory_allocator: Arc<dyn MemoryAllocator>,
-        command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
-        descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     ) -> PixelsDrawPipeline {
         let (vertices, indices) = textured_quad(2.0, 2.0);
         let vertex_buffer = Buffer::from_iter(
@@ -165,26 +146,26 @@ impl PixelsDrawPipeline {
             .unwrap()
         };
         PixelsDrawPipeline {
-            gfx_queue,
-            subpass,
             pipeline,
-            command_buffer_allocator,
-            descriptor_set_allocator,
             vertices: vertex_buffer,
             indices: index_buffer,
         }
     }
 
-    fn create_descriptor_set(&self, image: Arc<ImageView>) -> Arc<PersistentDescriptorSet> {
+    fn create_descriptor_set(
+        &self,
+        image: Arc<ImageView>,
+        resources: RenderResources,
+    ) -> Arc<PersistentDescriptorSet> {
         let layout = self.pipeline.layout().set_layouts().get(0).unwrap();
         let sampler = Sampler::new(
-            self.gfx_queue.device().clone(),
+            resources.queue.device().clone(),
             SamplerCreateInfo::simple_repeat_linear(),
         )
         .unwrap();
 
         PersistentDescriptorSet::new(
-            &self.descriptor_set_allocator,
+            resources.descriptor_set_allocator,
             layout.clone(),
             [WriteDescriptorSet::image_view_sampler(
                 0,
@@ -197,28 +178,14 @@ impl PixelsDrawPipeline {
     }
 
     /// Draw input `image` over a quad of size -1.0 to 1.0
-    pub fn draw(
-        &mut self,
-        viewport_dimensions: [u32; 2],
-        image: Arc<ImageView>,
-    ) -> Arc<SecondaryAutoCommandBuffer> {
-        let mut builder = AutoCommandBufferBuilder::secondary(
-            self.command_buffer_allocator.as_ref(),
-            self.gfx_queue.queue_family_index(),
-            CommandBufferUsage::MultipleSubmit,
-            CommandBufferInheritanceInfo {
-                render_pass: Some(self.subpass.clone().into()),
-                ..Default::default()
-            },
-        )
-        .unwrap();
-        let desc_set = self.create_descriptor_set(image);
-        builder
+    pub fn draw(&self, image: Arc<ImageView>, info: PaintCallbackInfo, ctx: &mut CallbackContext) {
+        let desc_set = self.create_descriptor_set(image, ctx.resources.clone());
+        ctx.builder
             .set_viewport(
                 0,
                 [Viewport {
-                    offset: [0.0, 0.0],
-                    extent: [viewport_dimensions[0] as f32, viewport_dimensions[1] as f32],
+                    offset: [info.viewport.left(), info.viewport.top()],
+                    extent: [info.viewport.width(), info.viewport.height()],
                     depth_range: 0.0..=1.0,
                 }]
                 .into_iter()
@@ -240,7 +207,6 @@ impl PixelsDrawPipeline {
             .unwrap()
             .draw_indexed(self.indices.len() as u32, 1, 0, 0, 0)
             .unwrap();
-        builder.build().unwrap()
     }
 }
 

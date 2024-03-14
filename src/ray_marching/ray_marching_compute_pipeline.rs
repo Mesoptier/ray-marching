@@ -138,6 +138,7 @@ impl RayMarchingComputePipeline {
             .unwrap()
             .push_constants(pipeline_layout.clone(), 0, push_constants)
             .unwrap()
+            // TODO: Fix group counts. We're currently missing groups at the edges sometimes.
             .dispatch([width / 8, height / 8, 1])
             .unwrap();
 
