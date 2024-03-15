@@ -1,12 +1,15 @@
+use eframe::{egui, egui_wgpu};
+
+use crate::ray_marching::renderer::{RayMarchingCallback, RayMarchingResources};
+
 mod csg_node_graph;
 mod ray_marching;
-// mod renderer;
-// mod scene;
-
-use eframe::egui;
 
 fn main() {
-    let native_options = eframe::NativeOptions::default();
+    let native_options = eframe::NativeOptions {
+        renderer: eframe::Renderer::Wgpu,
+        ..Default::default()
+    };
     eframe::run_native(
         "Ray Marching Demo",
         native_options,
@@ -134,7 +137,14 @@ struct RayMarchingApp {
 }
 
 impl RayMarchingApp {
-    fn new(_ctx: &eframe::CreationContext) -> Self {
+    fn new(ctx: &eframe::CreationContext) -> Self {
+        let wgpu_render_state = ctx.wgpu_render_state.as_ref().unwrap();
+        wgpu_render_state
+            .renderer
+            .write()
+            .callback_resources
+            .insert(RayMarchingResources::new(wgpu_render_state));
+
         Self {
             csg_node_graph: csg_node_graph::CSGNodeGraph::default(),
         }
@@ -150,8 +160,13 @@ impl eframe::App for RayMarchingApp {
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Ray Marching Demo");
-            ui.label("Hello, world!");
+            egui::Frame::canvas(ui.style()).show(ui, |ui| {
+                let (rect, _) = ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
+                ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+                    rect,
+                    RayMarchingCallback::new(0.0, self.csg_node_graph.evaluate_root()),
+                ));
+            });
         });
     }
 }
