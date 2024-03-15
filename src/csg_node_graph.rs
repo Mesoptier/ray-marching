@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use egui::{Color32, Ui};
+use eframe::egui;
 use egui_node_graph::{
     DataTypeTrait, Graph, GraphEditorState, InputId, InputParamKind, NodeDataTrait, NodeId,
     NodeResponse, NodeTemplateIter, NodeTemplateTrait, OutputId, UserResponseTrait,
@@ -82,9 +82,9 @@ pub struct Response;
 pub struct GraphState;
 
 impl DataTypeTrait<GraphState> for DataType {
-    fn data_type_color(&self, user_state: &mut GraphState) -> Color32 {
+    fn data_type_color(&self, user_state: &mut GraphState) -> egui::Color32 {
         // TODO
-        Color32::from_rgb(100, 20, 20)
+        egui::Color32::from_rgb(100, 20, 20)
     }
 
     fn name(&self) -> Cow<str> {
@@ -178,7 +178,7 @@ impl WidgetValueTrait for ValueType {
         &mut self,
         param_name: &str,
         _node_id: NodeId,
-        ui: &mut Ui,
+        ui: &mut egui::Ui,
         _user_state: &mut Self::UserState,
         _node_data: &Self::NodeData,
     ) -> Vec<Self::Response> {
@@ -217,7 +217,7 @@ impl NodeDataTrait for NodeData {
 
     fn bottom_ui(
         &self,
-        ui: &mut Ui,
+        ui: &mut egui::Ui,
         node_id: NodeId,
         graph: &Graph<Self, Self::DataType, Self::ValueType>,
         user_state: &mut Self::UserState,
@@ -233,13 +233,13 @@ type MyGraph = Graph<NodeData, DataType, ValueType>;
 type MyEditorState = GraphEditorState<NodeData, DataType, ValueType, NodeTemplate, GraphState>;
 
 #[derive(Default)]
-pub struct Gui {
+pub struct CSGNodeGraph {
     pub editor_state: MyEditorState,
     user_state: GraphState,
 }
 
-impl Gui {
-    pub fn draw(&mut self, ui: &mut Ui) {
+impl CSGNodeGraph {
+    pub fn draw(&mut self, ui: &mut egui::Ui) {
         let _graph_response = self.editor_state.draw_graph_editor(
             ui,
             AllNodeTemplates,

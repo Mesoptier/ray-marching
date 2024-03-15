@@ -1,5 +1,5 @@
-// mod gui;
-// mod ray_marching;
+mod csg_node_graph;
+mod ray_marching;
 // mod renderer;
 // mod scene;
 
@@ -129,16 +129,26 @@ fn main() {
     //     });
 }
 
-struct RayMarchingApp;
+struct RayMarchingApp {
+    csg_node_graph: csg_node_graph::CSGNodeGraph,
+}
 
 impl RayMarchingApp {
     fn new(_ctx: &eframe::CreationContext) -> Self {
-        Self
+        Self {
+            csg_node_graph: csg_node_graph::CSGNodeGraph::default(),
+        }
     }
 }
 
 impl eframe::App for RayMarchingApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::TopBottomPanel::bottom("node_graph")
+            .resizable(true)
+            .show(ctx, |ui| {
+                self.csg_node_graph.draw(ui);
+            });
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Ray Marching Demo");
             ui.label("Hello, world!");

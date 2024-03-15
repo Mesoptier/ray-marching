@@ -6,7 +6,7 @@ use enum_dispatch::enum_dispatch;
 pub use operations::*;
 pub use primitives::*;
 
-use crate::gui::ValueType;
+use crate::csg_node_graph::ValueType;
 use crate::ray_marching::csg::builder::CSGCommandBufferBuilder;
 
 pub(crate) mod builder;

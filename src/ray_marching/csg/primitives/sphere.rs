@@ -1,7 +1,7 @@
 use egui_node_graph::InputParamKind;
 use std::collections::HashMap;
 
-use crate::gui::ValueType;
+use crate::csg_node_graph::ValueType;
 use crate::ray_marching::csg::builder::{CSGCommandBufferBuilder, CSGCommandType};
 use crate::ray_marching::csg::{BuildCommands, CSGNode, CSGNodeTemplateTrait};
 
