@@ -124,12 +124,17 @@ fn calculate_normal(pos: vec3<f32>) -> vec3<f32> {
     );
 }
 
+struct CSGCommandList {
+    len: u32,
+    commands: array<CSGCommand>,
+}
+
 struct CSGCommand {
     cmd_type: u32,
     param_offset: u32,
 }
 
-@group(0) @binding(1) var<storage, read> csg_commands: array<CSGCommand>;
+@group(0) @binding(1) var<storage, read> csg_commands: CSGCommandList;
 @group(0) @binding(2) var<storage, read> csg_params: array<u32>;
 
 // Execution context
@@ -148,18 +153,16 @@ fn push_value(value: f32) {
 }
 
 fn map_scene(pos: vec3<f32>) -> f32 {
-    var cmd_count: u32 = arrayLength(&csg_commands); // TODO: Add a proper way to get the number of commands.
-
     // Early return for empty scenes.
-    if (cmd_count == 0u) {
-        return 0.0;
+    if (csg_commands.len == 0u) {
+        return ray_march_limits.max_dist;
     }
 
     // Reset the value stack.
     value_stack_size = 0u;
 
-    for (var cmd_index = 0u; cmd_index < cmd_count; cmd_index++) {
-        let cmd = csg_commands[cmd_index];
+    for (var idx = 0u; idx < csg_commands.len; idx++) {
+        let cmd = csg_commands.commands[idx];
         push_value(eval_cmd(cmd, pos));
     }
 

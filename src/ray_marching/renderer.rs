@@ -171,23 +171,30 @@ impl CallbackTrait for RayMarchingCallback {
     ) -> Vec<CommandBuffer> {
         let resources: &RayMarchingResources = callback_resources.get().unwrap();
 
+        let mut builder = CSGCommandBufferBuilder::new();
         if let Some(csg_node) = &self.csg_node {
-            let mut builder = CSGCommandBufferBuilder::new();
             csg_node.build_commands(&mut builder);
-
-            // TODO: Recreate the buffers if they are too small
-
-            queue.write_buffer(
-                &resources.cmd_buffer,
-                0,
-                bytemuck::cast_slice(&builder.commands),
-            );
-            queue.write_buffer(
-                &resources.cmd_param_buffer,
-                0,
-                bytemuck::cast_slice(&builder.params),
-            );
         }
+
+        // TODO: Recreate the buffers if they are too small
+        // csg_commands.len: u32
+        queue.write_buffer(
+            &resources.cmd_buffer,
+            0,
+            bytemuck::cast_slice(&[builder.commands.len()]),
+        );
+        // csg_commands.commands: array<CSGCommand>
+        queue.write_buffer(
+            &resources.cmd_buffer,
+            4,
+            bytemuck::cast_slice(&builder.commands),
+        );
+        // csg_commands.params: array<u32>
+        queue.write_buffer(
+            &resources.cmd_param_buffer,
+            0,
+            bytemuck::cast_slice(&builder.params),
+        );
 
         Vec::new()
     }
