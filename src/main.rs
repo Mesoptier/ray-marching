@@ -164,7 +164,11 @@ impl eframe::App for RayMarchingApp {
                 let (rect, _) = ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
                 ui.painter().add(egui_wgpu::Callback::new_paint_callback(
                     rect,
-                    RayMarchingCallback::new(0.0, self.csg_node_graph.evaluate_root()),
+                    RayMarchingCallback::new(
+                        0.0,
+                        self.csg_node_graph.evaluate_root(),
+                        [rect.width(), rect.height()],
+                    ),
                 ));
             });
         });

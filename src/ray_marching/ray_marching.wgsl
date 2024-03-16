@@ -1,5 +1,4 @@
 struct VertexOut {
-    // TODO: Should be screen-space position
     @location(0) uv: vec2<f32>,
     @builtin(position) position: vec4<f32>,
 }
@@ -19,9 +18,11 @@ fn vs_main(@builtin(vertex_index) v_idx: u32) -> VertexOut {
     return out;
 }
 
+@group(0) @binding(2) var<uniform> viewport: vec2<f32>;
+
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
-    let uv = in.uv;
+    let uv = in.uv * (viewport / viewport.y);
 
     // Camera
     let angle: f32 = 0.0;

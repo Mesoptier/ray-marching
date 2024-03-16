@@ -21,6 +21,7 @@ pub struct RayMarchingResources {
     bind_group: wgpu::BindGroup,
 
     cmd_buffer: wgpu::Buffer,
+    viewport_buffer: wgpu::Buffer,
 }
 
 impl RayMarchingResources {
@@ -50,6 +51,16 @@ impl RayMarchingResources {
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
@@ -86,6 +97,12 @@ impl RayMarchingResources {
             multiview: None,
         });
 
+        let viewport_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("viewport"),
+            contents: bytemuck::cast_slice(&[512.0, 512.0]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
         let ray_march_limits_buffer =
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("ray_march_limits"),
@@ -116,6 +133,10 @@ impl RayMarchingResources {
                     binding: 1,
                     resource: cmd_buffer.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: viewport_buffer.as_entire_binding(),
+                },
             ],
         });
 
@@ -123,6 +144,7 @@ impl RayMarchingResources {
             pipeline,
             bind_group,
             cmd_buffer,
+            viewport_buffer,
         }
     }
 }
@@ -130,11 +152,16 @@ impl RayMarchingResources {
 pub struct RayMarchingCallback {
     time: f32,
     csg_node: Option<CSGNode>,
+    viewport: [f32; 2],
 }
 
 impl RayMarchingCallback {
-    pub fn new(time: f32, csg_node: Option<CSGNode>) -> Self {
-        Self { time, csg_node }
+    pub fn new(time: f32, csg_node: Option<CSGNode>, viewport: [f32; 2]) -> Self {
+        Self {
+            time,
+            csg_node,
+            viewport,
+        }
     }
 }
 
@@ -147,6 +174,12 @@ impl CallbackTrait for RayMarchingCallback {
         callback_resources: &mut CallbackResources,
     ) -> Vec<CommandBuffer> {
         let resources: &RayMarchingResources = callback_resources.get().unwrap();
+
+        queue.write_buffer(
+            &resources.viewport_buffer,
+            0,
+            bytemuck::cast_slice(&self.viewport),
+        );
 
         let mut builder = CSGCommandBufferBuilder::new();
         if let Some(csg_node) = &self.csg_node {
