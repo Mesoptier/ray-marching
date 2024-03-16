@@ -21,7 +21,6 @@ pub struct RayMarchingResources {
     bind_group: wgpu::BindGroup,
 
     cmd_buffer: wgpu::Buffer,
-    cmd_param_buffer: wgpu::Buffer,
 }
 
 impl RayMarchingResources {
@@ -48,16 +47,6 @@ impl RayMarchingResources {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: true },
@@ -115,13 +104,6 @@ impl RayMarchingResources {
             mapped_at_creation: false,
         });
 
-        let cmd_param_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("ray_marching_cmd_param_buffer"),
-            size: 1024,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("ray_marching"),
             layout: &bind_group_layout,
@@ -134,10 +116,6 @@ impl RayMarchingResources {
                     binding: 1,
                     resource: cmd_buffer.as_entire_binding(),
                 },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: cmd_param_buffer.as_entire_binding(),
-                },
             ],
         });
 
@@ -145,7 +123,6 @@ impl RayMarchingResources {
             pipeline,
             bind_group,
             cmd_buffer,
-            cmd_param_buffer,
         }
     }
 }
@@ -177,23 +154,15 @@ impl CallbackTrait for RayMarchingCallback {
         }
 
         // TODO: Recreate the buffers if they are too small
-        // csg_commands.len: u32
         queue.write_buffer(
             &resources.cmd_buffer,
             0,
-            bytemuck::cast_slice(&[builder.commands.len()]),
+            bytemuck::cast_slice(&[builder.cmd_count]),
         );
-        // csg_commands.commands: array<CSGCommand>
         queue.write_buffer(
             &resources.cmd_buffer,
             4,
-            bytemuck::cast_slice(&builder.commands),
-        );
-        // csg_commands.params: array<u32>
-        queue.write_buffer(
-            &resources.cmd_param_buffer,
-            0,
-            bytemuck::cast_slice(&builder.params),
+            bytemuck::cast_slice(&builder.buffer),
         );
 
         Vec::new()

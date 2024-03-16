@@ -124,18 +124,31 @@ fn calculate_normal(pos: vec3<f32>) -> vec3<f32> {
     );
 }
 
-struct CSGCommandList {
-    len: u32,
-    commands: array<CSGCommand>,
+struct CSGCommandBuffer {
+    cmd_count: u32,
+    buffer: array<u32>,
 }
 
-struct CSGCommand {
-    cmd_type: u32,
-    param_offset: u32,
+@group(0) @binding(1) var<storage, read> csg_commands: CSGCommandBuffer;
+var<private> csg_commands_ptr: u32;
+
+fn csg_pop_u32() -> u32 {
+    let value = csg_commands.buffer[csg_commands_ptr];
+    csg_commands_ptr++;
+    return value;
 }
 
-@group(0) @binding(1) var<storage, read> csg_commands: CSGCommandList;
-@group(0) @binding(2) var<storage, read> csg_params: array<u32>;
+fn csg_pop_f32() -> f32 {
+    return bitcast<f32>(csg_pop_u32());
+}
+
+fn csg_pop_vec3() -> vec3<f32> {
+    return vec3<f32>(csg_pop_f32(), csg_pop_f32(), csg_pop_f32());
+}
+
+fn csg_pop_command_type() -> u32 {
+    return csg_pop_u32();
+}
 
 // Execution context
 const value_stack_max_size: u32 = 32u;
@@ -154,26 +167,27 @@ fn push_value(value: f32) {
 
 fn map_scene(pos: vec3<f32>) -> f32 {
     // Early return for empty scenes.
-    if (csg_commands.len == 0u) {
+    if (csg_commands.cmd_count == 0u) {
         return ray_march_limits.max_dist;
     }
 
-    // Reset the value stack.
+    // Reset pointers.
     value_stack_size = 0u;
+    csg_commands_ptr = 0u;
 
-    for (var idx = 0u; idx < csg_commands.len; idx++) {
-        let cmd = csg_commands.commands[idx];
-        push_value(eval_cmd(cmd, pos));
+    for (var idx = 0u; idx < csg_commands.cmd_count; idx++) {
+        let cmd_type = csg_pop_command_type();
+        push_value(eval_cmd(cmd_type, pos));
     }
 
     return pop_value();
 }
 
-fn eval_cmd(cmd: CSGCommand, pos: vec3<f32>) -> f32 {
-    switch (cmd.cmd_type) {
+fn eval_cmd(cmd_type: u32, pos: vec3<f32>) -> f32 {
+    switch (cmd_type) {
         // Primitives
         case 0u: {
-            return eval_cmd_sphere(pos, cmd.param_offset);
+            return eval_cmd_sphere(pos);
         }
 
         // Binary operations
@@ -190,13 +204,9 @@ fn eval_cmd(cmd: CSGCommand, pos: vec3<f32>) -> f32 {
     }
 }
 
-fn eval_cmd_sphere(pos: vec3<f32>, param_offset: u32) -> f32 {
-    let center = vec3<f32>(
-        bitcast<f32>(csg_params[param_offset + 0u]),
-        bitcast<f32>(csg_params[param_offset + 1u]),
-        bitcast<f32>(csg_params[param_offset + 2u]),
-    );
-    let radius = bitcast<f32>(csg_params[param_offset + 3u]);
+fn eval_cmd_sphere(pos: vec3<f32>) -> f32 {
+    let center = csg_pop_vec3();
+    let radius = csg_pop_f32();
     return length(pos - center) - radius;
 }
 
