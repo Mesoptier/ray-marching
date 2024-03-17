@@ -20,6 +20,9 @@ fn vs_main(@builtin(vertex_index) v_idx: u32) -> VertexOut {
 
 @group(0) @binding(2) var<uniform> viewport: vec2<f32>;
 
+// Number of antialiasing samples in each direction (total samples = aa_samples * aa_samples)
+const aa_samples: u32 = 4u;
+
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let uv = in.uv * (viewport / viewport.y);
@@ -42,17 +45,35 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
 
     var total_color = vec3<f32>(0.0);
 
-    // TODO: Add antialiasing
+    for (var i = 0u; i < aa_samples; i++) {
+        for (var j = 0u; j < aa_samples; j++) {
+            // Anti-aliasing offset in pixel space (-0.5 to 0.5)
+            // - aa_samples = 1 -> [0.0]
+            // - aa_samples = 2 -> [-0.25, 0.25]
+            // - aa_samples = 3 -> [-0.333, 0.0, 0.333]
+            // - aa_samples = 4 -> [-0.375, -0.125, 0.125, 0.375]
+            // - etc.
+            let aa_pixel_offset = (vec2<f32>(f32(i), f32(j)) + 0.5) / f32(aa_samples) - 0.5;
 
-    // Ray direction
-    let ray_direction = normalize(vec3(uv.x * uu + uv.y * vv + focal_length * ww));
+            // Anti-aliasing offset in UV space
+            let aa_uv_offset = aa_pixel_offset * 2.0 / viewport.y;
 
-    // Ray march
-    var color = ray_march(ray_origin, ray_direction);
+            // UV with anti-aliasing offset
+            let aa_uv = uv + aa_uv_offset;
 
-    // Gamma
-    color = sqrt(color);
-    total_color += color;
+            // Ray direction
+            let ray_direction = normalize(vec3(aa_uv.x * uu + aa_uv.y * vv + focal_length * ww));
+
+            // Ray march
+            var color = ray_march(ray_origin, ray_direction);
+
+            // Gamma
+            color = sqrt(color);
+            total_color += color;
+        }
+    }
+
+    total_color /= f32(aa_samples * aa_samples);
 
     return vec4<f32>(total_color, 1.0);
 }
