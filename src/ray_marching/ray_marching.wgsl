@@ -134,7 +134,7 @@ fn ray_march(origin: vec3<f32>, direction: vec3<f32>) -> vec3<f32> {
 }
 
 /// Calculate the normal vector at point `pos`.
-/// See: https://www.iquilezles.org/www/articles/normalsSDF/normalsSDF.htm
+/// See: https://iquilezles.org/articles/normalsSDF/
 fn calculate_normal(pos: vec3<f32>) -> vec3<f32> {
     let eps = 0.0001;
     let k = vec2<f32>(1.0, -1.0);
