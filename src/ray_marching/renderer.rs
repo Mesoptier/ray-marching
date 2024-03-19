@@ -1,3 +1,4 @@
+use crate::camera::Camera;
 use eframe::egui::PaintCallbackInfo;
 use eframe::egui_wgpu::{CallbackResources, CallbackTrait, RenderState};
 use wgpu::util::DeviceExt;
@@ -7,6 +8,35 @@ use wgpu::{
 
 use crate::ray_marching::csg::builder::CSGCommandBufferBuilder;
 use crate::ray_marching::csg::{BuildCommands, CSGNode};
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct Uniforms {
+    viewport: [f32; 4],
+    camera_target: [f32; 4],
+    camera_position: [f32; 4],
+}
+
+impl Uniforms {
+    fn new(viewport: [f32; 2], camera_target: [f32; 3], camera_position: [f32; 3]) -> Self {
+        Self {
+            viewport: [viewport[0], viewport[1], 0.0, 0.0],
+            camera_target: [camera_target[0], camera_target[1], camera_target[2], 0.0],
+            camera_position: [
+                camera_position[0],
+                camera_position[1],
+                camera_position[2],
+                0.0,
+            ],
+        }
+    }
+}
+
+impl Default for Uniforms {
+    fn default() -> Self {
+        Self::new([800.0, 600.0], [0.0, 0.0, 0.0], [0.0, 0.0, 5.0])
+    }
+}
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -21,7 +51,7 @@ pub struct RayMarchingResources {
     bind_group: wgpu::BindGroup,
 
     cmd_buffer: wgpu::Buffer,
-    viewport_buffer: wgpu::Buffer,
+    uniforms_buffer: wgpu::Buffer,
 }
 
 impl RayMarchingResources {
@@ -97,9 +127,9 @@ impl RayMarchingResources {
             multiview: None,
         });
 
-        let viewport_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let uniforms_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("viewport"),
-            contents: bytemuck::cast_slice(&[512.0, 512.0]),
+            contents: bytemuck::cast_slice(&[Uniforms::default()]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -135,7 +165,7 @@ impl RayMarchingResources {
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: viewport_buffer.as_entire_binding(),
+                    resource: uniforms_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -144,7 +174,7 @@ impl RayMarchingResources {
             pipeline,
             bind_group,
             cmd_buffer,
-            viewport_buffer,
+            uniforms_buffer: uniforms_buffer,
         }
     }
 }
@@ -153,14 +183,16 @@ pub struct RayMarchingCallback {
     time: f32,
     csg_node: Option<CSGNode>,
     viewport: [f32; 2],
+    camera: Camera,
 }
 
 impl RayMarchingCallback {
-    pub fn new(time: f32, csg_node: Option<CSGNode>, viewport: [f32; 2]) -> Self {
+    pub fn new(time: f32, csg_node: Option<CSGNode>, viewport: [f32; 2], camera: Camera) -> Self {
         Self {
             time,
             csg_node,
             viewport,
+            camera,
         }
     }
 }
@@ -176,9 +208,13 @@ impl CallbackTrait for RayMarchingCallback {
         let resources: &RayMarchingResources = callback_resources.get().unwrap();
 
         queue.write_buffer(
-            &resources.viewport_buffer,
+            &resources.uniforms_buffer,
             0,
-            bytemuck::cast_slice(&self.viewport),
+            bytemuck::cast_slice(&[Uniforms::new(
+                self.viewport,
+                self.camera.target,
+                self.camera.position,
+            )]),
         );
 
         let mut builder = CSGCommandBufferBuilder::new();

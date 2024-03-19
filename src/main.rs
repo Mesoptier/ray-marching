@@ -2,6 +2,7 @@ use eframe::{egui, egui_wgpu};
 
 use crate::ray_marching::renderer::{RayMarchingCallback, RayMarchingResources};
 
+mod camera;
 mod csg_node_graph;
 mod ray_marching;
 
@@ -20,6 +21,7 @@ fn main() {
 
 struct RayMarchingApp {
     csg_node_graph: csg_node_graph::CSGNodeGraph,
+    camera_controller: camera::CameraController,
 }
 
 impl RayMarchingApp {
@@ -33,6 +35,7 @@ impl RayMarchingApp {
 
         Self {
             csg_node_graph: csg_node_graph::CSGNodeGraph::default(),
+            camera_controller: camera::CameraController::new([0.0, 0.0, 0.0], 5.0),
         }
     }
 }
@@ -47,13 +50,28 @@ impl eframe::App for RayMarchingApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::Frame::canvas(ui.style()).show(ui, |ui| {
-                let (rect, _) = ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
+                let (rect, response) =
+                    ui.allocate_exact_size(ui.available_size(), egui::Sense::drag());
+
+                if response.dragged_by(egui::PointerButton::Primary) {
+                    let modifiers = ctx.input(|input_state| input_state.modifiers);
+                    let delta = response.drag_delta().into();
+                    if modifiers.ctrl {
+                        self.camera_controller
+                            .update(camera::CameraControllerEvent::Pan(delta));
+                    } else {
+                        self.camera_controller
+                            .update(camera::CameraControllerEvent::Orbit(delta));
+                    }
+                }
+
                 ui.painter().add(egui_wgpu::Callback::new_paint_callback(
                     rect,
                     RayMarchingCallback::new(
                         0.0,
                         self.csg_node_graph.evaluate_root(),
                         [rect.width(), rect.height()],
+                        self.camera_controller.camera(),
                     ),
                 ));
             });

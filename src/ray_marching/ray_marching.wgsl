@@ -18,21 +18,26 @@ fn vs_main(@builtin(vertex_index) v_idx: u32) -> VertexOut {
     return out;
 }
 
-@group(0) @binding(2) var<uniform> viewport: vec2<f32>;
+struct Uniforms {
+    viewport: vec2<f32>,
+    camera_target: vec3<f32>,
+    camera_position: vec3<f32>,
+}
+
+@group(0) @binding(2) var<uniform> uniforms: Uniforms;
 
 // Number of antialiasing samples in each direction (total samples = aa_samples * aa_samples)
 const aa_samples: u32 = 4u;
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
+    let viewport = uniforms.viewport;
     let uv = in.uv * (viewport / viewport.y);
 
     // Camera
-    let angle: f32 = 0.0;
-    let camera_position = vec3<f32>(5.0 * cos(angle), 2.0, 5.0 * sin(angle));
+    let camera_position = uniforms.camera_position;
+    let camera_target = uniforms.camera_target;
     let camera_up = vec3<f32>(0.0, 1.0, 0.0);
-    let camera_target = vec3<f32>(0.0);
-
     let focal_length: f32 = 2.5;
 
     // Camera matrix
