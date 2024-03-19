@@ -1,99 +1,62 @@
-use std::time::{Duration, Instant};
+use eframe::{egui, egui_wgpu};
 
-use vulkano::image::ImageUsage;
-use vulkano::sync::GpuFuture;
-use vulkano_util::context::{VulkanoConfig, VulkanoContext};
-use vulkano_util::renderer::DEFAULT_IMAGE_FORMAT;
-use vulkano_util::window::{VulkanoWindows, WindowDescriptor};
-use winit::event_loop::EventLoop;
+use crate::ray_marching::renderer::{RayMarchingCallback, RayMarchingResources};
 
-use crate::app::App;
-
-mod app;
+mod csg_node_graph;
 mod ray_marching;
-mod renderer;
 
 fn main() {
-    let context = VulkanoContext::new(VulkanoConfig::default());
-    let event_loop = EventLoop::new();
+    let native_options = eframe::NativeOptions {
+        renderer: eframe::Renderer::Wgpu,
+        ..Default::default()
+    };
+    eframe::run_native(
+        "Ray Marching Demo",
+        native_options,
+        Box::new(|ctx| Box::new(RayMarchingApp::new(ctx))),
+    )
+    .unwrap()
+}
 
-    let mut windows = VulkanoWindows::default();
-    let _primary_window_id = windows.create_window(
-        &event_loop,
-        &context,
-        &WindowDescriptor {
-            title: "Ray Marching Demo".into(),
-            ..Default::default()
-        },
-        |_| {},
-    );
+struct RayMarchingApp {
+    csg_node_graph: csg_node_graph::CSGNodeGraph,
+}
 
-    let primary_window_renderer = windows.get_primary_renderer_mut().unwrap();
+impl RayMarchingApp {
+    fn new(ctx: &eframe::CreationContext) -> Self {
+        let wgpu_render_state = ctx.wgpu_render_state.as_ref().unwrap();
+        wgpu_render_state
+            .renderer
+            .write()
+            .callback_resources
+            .insert(RayMarchingResources::new(wgpu_render_state));
 
-    let render_target_id = 0;
-    primary_window_renderer.add_additional_image_view(
-        render_target_id,
-        DEFAULT_IMAGE_FORMAT,
-        ImageUsage::SAMPLED | ImageUsage::INPUT_ATTACHMENT | ImageUsage::STORAGE,
-    );
-
-    let mut app = App::new(
-        context.graphics_queue().clone(),
-        primary_window_renderer.swapchain_format(),
-    );
-
-    let start_time = Instant::now();
-
-    event_loop.run(move |event, _, control_flow| {
-        use winit::event::*;
-        use winit::event_loop::ControlFlow;
-
-        let primary_window_renderer = windows.get_primary_renderer_mut().unwrap();
-
-        match event {
-            Event::NewEvents(_sc) => {
-                let next_frame_time = Instant::now() + Duration::from_nanos(16_666_667);
-                *control_flow = ControlFlow::WaitUntil(next_frame_time);
-            }
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => {
-                *control_flow = ControlFlow::Exit;
-            }
-            Event::WindowEvent {
-                event: WindowEvent::Resized(..),
-                ..
-            } => primary_window_renderer.resize(),
-            Event::MainEventsCleared => {
-                // Start frame
-                let before_pipeline_future = match primary_window_renderer.acquire() {
-                    Err(e) => {
-                        println!("{}", e);
-                        return;
-                    }
-                    Ok(future) => future,
-                };
-
-                // Compute & render
-                let render_target =
-                    primary_window_renderer.get_additional_image_view(render_target_id);
-
-                let compute_future = app
-                    .compute_pipeline
-                    .compute(render_target.clone(), start_time.elapsed().as_secs_f32())
-                    .join(before_pipeline_future);
-
-                let after_render_pass_future = app.render_pass.render(
-                    compute_future,
-                    render_target,
-                    primary_window_renderer.swapchain_image_view(),
-                );
-
-                // Finish frame
-                primary_window_renderer.present(after_render_pass_future, true);
-            }
-            _ => {}
+        Self {
+            csg_node_graph: csg_node_graph::CSGNodeGraph::default(),
         }
-    });
+    }
+}
+
+impl eframe::App for RayMarchingApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::TopBottomPanel::bottom("node_graph")
+            .resizable(true)
+            .show(ctx, |ui| {
+                self.csg_node_graph.draw(ui);
+            });
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            egui::Frame::canvas(ui.style()).show(ui, |ui| {
+                let (rect, _) = ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
+                ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+                    rect,
+                    RayMarchingCallback::new(
+                        0.0,
+                        self.csg_node_graph.evaluate_root(),
+                        [rect.width(), rect.height()],
+                    ),
+                ));
+            });
+        });
+    }
 }

@@ -42,25 +42,23 @@ impl CSGCommandDescriptor {
 }
 
 pub struct CSGCommandBufferBuilder {
-    pub commands: Vec<CSGCommandDescriptor>,
-    pub params: Vec<u32>,
+    pub cmd_count: u32,
+    pub buffer: Vec<u32>,
 }
 
 impl CSGCommandBufferBuilder {
     pub fn new() -> Self {
         Self {
-            commands: vec![],
-            params: vec![],
+            cmd_count: 0,
+            buffer: Vec::new(),
         }
     }
 
     /// Push a command onto the command stack.
     /// Must be called before pushing the command parameters.
     pub fn push_command(&mut self, cmd_type: CSGCommandType) -> &mut Self {
-        self.commands.push(CSGCommandDescriptor::new(
-            cmd_type,
-            self.params.len() as u32,
-        ));
+        self.cmd_count += 1;
+        self.buffer.push(cmd_type as u32);
         self
     }
 
@@ -68,7 +66,7 @@ impl CSGCommandBufferBuilder {
     /// Must be called after pushing the command.
     pub fn push_param_vec3(&mut self, value: [f32; 3]) -> &mut Self {
         for v in value {
-            self.params.push(v.to_bits());
+            self.buffer.push(v.to_bits());
         }
         self
     }
@@ -76,7 +74,7 @@ impl CSGCommandBufferBuilder {
     /// Push a GLSL float param onto the parameter stack.
     /// Must be called after pushing the command.
     pub fn push_param_float(&mut self, value: f32) -> &mut Self {
-        self.params.push(value.to_bits());
+        self.buffer.push(value.to_bits());
         self
     }
 }

@@ -9,9 +9,8 @@ edition = "2021"
 debug = true
 
 [dependencies]
-bytemuck = "1.14.3"
-vulkano = "0.34.1"
-vulkano-shaders = "0.34.0"
-vulkano-util = "0.34.1"
-vulkano-win = "0.34.0"
-winit = "0.28.7"
+bytemuck = "1.14"
+eframe = { version = "0.24", features = ["wgpu"] }
+egui_node_graph = { git = "https://github.com/SergioRibera/egui_node_graph.git", version = "0.4.0", rev = "b315264d9f92417082b090cd1985135d65bad893" }
+enum_dispatch = "0.3.12"
+wgpu = "0.18"
