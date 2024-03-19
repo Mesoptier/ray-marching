@@ -1,45 +1,55 @@
-use crate::camera::Camera;
 use eframe::egui::PaintCallbackInfo;
 use eframe::egui_wgpu::{CallbackResources, CallbackTrait, RenderState};
+use encase::internal::WriteInto;
+use encase::{ShaderType, UniformBuffer};
+use mint::{Vector2, Vector3};
 use wgpu::util::DeviceExt;
 use wgpu::{
     CommandBuffer, CommandEncoder, Device, PrimitiveState, PrimitiveTopology, Queue, RenderPass,
 };
 
+use crate::camera::Camera;
 use crate::ray_marching::csg::builder::CSGCommandBufferBuilder;
 use crate::ray_marching::csg::{BuildCommands, CSGNode};
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct Uniforms {
-    viewport: [f32; 4],
-    camera_target: [f32; 4],
-    camera_position: [f32; 4],
+trait AsShaderBytes {
+    fn as_shader_bytes(&self) -> Box<[u8]>;
 }
 
-impl Uniforms {
-    fn new(viewport: [f32; 2], camera_target: [f32; 3], camera_position: [f32; 3]) -> Self {
-        Self {
-            viewport: [viewport[0], viewport[1], 0.0, 0.0],
-            camera_target: [camera_target[0], camera_target[1], camera_target[2], 0.0],
-            camera_position: [
-                camera_position[0],
-                camera_position[1],
-                camera_position[2],
-                0.0,
-            ],
-        }
+impl<T: ShaderType + WriteInto> AsShaderBytes for T {
+    fn as_shader_bytes(&self) -> Box<[u8]> {
+        let mut buffer = UniformBuffer::new(Vec::new());
+        buffer.write(self).unwrap();
+        buffer.into_inner().into_boxed_slice()
     }
+}
+
+#[derive(Debug, Copy, Clone, ShaderType)]
+struct Uniforms {
+    viewport: Vector2<f32>,
+    camera_target: Vector3<f32>,
+    camera_position: Vector3<f32>,
 }
 
 impl Default for Uniforms {
     fn default() -> Self {
-        Self::new([800.0, 600.0], [0.0, 0.0, 0.0], [0.0, 0.0, 5.0])
+        Self {
+            viewport: Vector2 { x: 0.0, y: 0.0 },
+            camera_target: Vector3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            camera_position: Vector3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+        }
     }
 }
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone, ShaderType)]
 struct RayMarchLimits {
     min_dist: f32,
     max_dist: f32,
@@ -129,18 +139,19 @@ impl RayMarchingResources {
 
         let uniforms_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("viewport"),
-            contents: bytemuck::cast_slice(&[Uniforms::default()]),
+            contents: &Uniforms::default().as_shader_bytes(),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
         let ray_march_limits_buffer =
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("ray_march_limits"),
-                contents: bytemuck::cast_slice(&[RayMarchLimits {
+                contents: &RayMarchLimits {
                     min_dist: 0.01,
                     max_dist: 100.0,
                     max_iter: 100,
-                }]),
+                }
+                .as_shader_bytes(),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
 
@@ -174,7 +185,7 @@ impl RayMarchingResources {
             pipeline,
             bind_group,
             cmd_buffer,
-            uniforms_buffer: uniforms_buffer,
+            uniforms_buffer,
         }
     }
 }
@@ -207,14 +218,18 @@ impl CallbackTrait for RayMarchingCallback {
     ) -> Vec<CommandBuffer> {
         let resources: &RayMarchingResources = callback_resources.get().unwrap();
 
+        let viewport = self.viewport;
+        let camera_target = self.camera.target;
+        let camera_position = self.camera.position;
         queue.write_buffer(
             &resources.uniforms_buffer,
             0,
-            bytemuck::cast_slice(&[Uniforms::new(
-                self.viewport,
-                self.camera.target,
-                self.camera.position,
-            )]),
+            &Uniforms {
+                viewport: viewport.into(),
+                camera_target: camera_target.into(),
+                camera_position: camera_position.into(),
+            }
+            .as_shader_bytes(),
         );
 
         let mut builder = CSGCommandBufferBuilder::new();
