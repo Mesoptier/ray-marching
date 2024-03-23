@@ -6,6 +6,6 @@
 - [x] Basic SDF primitives and operations.
 - [x] Uploading SDF graph to the GPU, so it can be modified at runtime.
 - [x] Basic graph editor to modify the SDF graph.
-- [ ] Camera controls.
+- [x] Camera controls.
 - [ ] More SDF primitives and operations.
 - [ ] Material system.
