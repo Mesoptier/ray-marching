@@ -4,7 +4,7 @@ use eframe::egui::PaintCallbackInfo;
 use eframe::egui_wgpu::{CallbackResources, CallbackTrait, RenderState};
 use encase::internal::WriteInto;
 use encase::{ShaderType, UniformBuffer};
-use nalgebra::{Matrix4, Perspective3};
+use nalgebra::{Matrix4, Perspective3, Vector2};
 use wgpu::util::DeviceExt;
 use wgpu::{
     CommandBuffer, CommandEncoder, Device, PrimitiveState, PrimitiveTopology, Queue, RenderPass,
@@ -28,6 +28,7 @@ impl<T: ShaderType + WriteInto> AsShaderBytes for T {
 
 #[derive(Debug, Default, Copy, Clone, ShaderType)]
 struct Uniforms {
+    viewport_extent: Vector2<f32>,
     inv_proj: Matrix4<f32>,
     inv_view: Matrix4<f32>,
 }
@@ -205,13 +206,19 @@ impl CallbackTrait for RayMarchingCallback {
         let projection =
             Perspective3::new(self.viewport[0] / self.viewport[1], FRAC_PI_4, 1.0, 10000.0);
 
+        let viewport_extent = Vector2::new(self.viewport[0], self.viewport[1]);
         let inv_proj = projection.inverse();
         let inv_view = self.camera.view().inverse().to_homogeneous();
 
         queue.write_buffer(
             &resources.uniforms_buffer,
             0,
-            &Uniforms { inv_proj, inv_view }.as_shader_bytes(),
+            &Uniforms {
+                viewport_extent,
+                inv_proj,
+                inv_view,
+            }
+            .as_shader_bytes(),
         );
 
         let mut builder = CSGCommandBufferBuilder::new();

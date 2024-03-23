@@ -20,6 +20,8 @@ fn vs_main(@builtin(vertex_index) v_idx: u32) -> VertexOut {
 }
 
 struct Uniforms {
+    /// Extent of the viewport in pixels.
+    viewport_extent: vec2<f32>,
     /// Inversed projection matrix.
     inv_proj: mat4x4<f32>,
     /// Inversed view matrix.
@@ -29,7 +31,7 @@ struct Uniforms {
 @group(0) @binding(2) var<uniform> uniforms: Uniforms;
 
 // Number of antialiasing samples in each direction (total samples = aa_samples * aa_samples)
-const aa_samples: u32 = 1u;
+const aa_samples: u32 = 4u;
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
@@ -39,12 +41,19 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
 
     var total_color = vec3<f32>(0.0);
 
-//    for (var i = 0u; i < aa_samples; i++) {
-//        for (var j = 0u; j < aa_samples; j++) {
-//            // TODO: Anti-aliasing offset in pixel space (-0.5 to 0.5)
+    for (var i = 0u; i < aa_samples; i++) {
+        for (var j = 0u; j < aa_samples; j++) {
+            // Anti-aliasing offset in pixel space (-0.5 to 0.5)
+            // - aa_samples = 1 -> [0.0]
+            // - aa_samples = 2 -> [-0.25, 0.25]
+            // - aa_samples = 3 -> [-0.333, 0.0, 0.333]
+            // - aa_samples = 4 -> [-0.375, -0.125, 0.125, 0.375]
+            // - etc.
+            let aa_offset_raster = (vec2<f32>(f32(i), f32(j)) + 0.5) / f32(aa_samples) - 0.5;
+            let aa_offset_screen = aa_offset_raster / uniforms.viewport_extent * 2.0;
 
             // Point on the image plane
-            let pt_screen = in.pt_screen;
+            let pt_screen = in.pt_screen + aa_offset_screen;
             let pt_ndc = vec4<f32>(pt_screen, -1.0, 1.0);
             let pt_view = uniforms.inv_proj * pt_ndc;
             let pt_world = uniforms.inv_view * pt_view;
@@ -58,8 +67,8 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
             // Gamma
             color = sqrt(color);
             total_color += color;
-//        }
-//    }
+        }
+    }
 
     total_color /= f32(aa_samples * aa_samples);
 
