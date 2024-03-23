@@ -1,8 +1,15 @@
-use nalgebra::{Point3, UnitQuaternion, Vector3};
+use nalgebra::{convert, Affine3, Point3, Translation3, UnitQuaternion, Vector3};
 
 pub(crate) struct Camera {
-    pub target: Point3<f32>,
-    pub position: Point3<f32>,
+    position: Point3<f32>,
+    rotation: UnitQuaternion<f32>,
+}
+
+impl Camera {
+    /// Get world-to-view transformation matrix.
+    pub(crate) fn view(&self) -> Affine3<f32> {
+        convert(self.rotation.inverse() * Translation3::from(-self.position.coords))
+    }
 }
 
 pub(crate) enum OrbitCameraControllerEvent {
@@ -47,11 +54,9 @@ impl OrbitCameraController {
     }
 
     pub(crate) fn camera(&self) -> Camera {
-        let position = self.target + self.rotation() * Vector3::z() * self.radius;
-        Camera {
-            target: self.target,
-            position,
-        }
+        let rotation = self.rotation();
+        let position = self.target + rotation * Vector3::z() * self.radius;
+        Camera { position, rotation }
     }
 
     pub(crate) fn update(&mut self, event: OrbitCameraControllerEvent) {

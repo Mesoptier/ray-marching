@@ -1,5 +1,6 @@
 struct VertexOut {
-    @location(0) uv: vec2<f32>,
+    // Point on the image plane in screen space. (bottom-left is [-1, -1], top-right is [1, 1]).
+    @location(0) pt_screen: vec2<f32>,
     @builtin(position) position: vec4<f32>,
 }
 
@@ -14,69 +15,51 @@ var<private> v_positions: array<vec2<f32>, 4> = array<vec2<f32>, 4>(
 fn vs_main(@builtin(vertex_index) v_idx: u32) -> VertexOut {
     var out: VertexOut;
     out.position = vec4<f32>(v_positions[v_idx], 0.0, 1.0);
-    out.uv = v_positions[v_idx];
+    out.pt_screen = v_positions[v_idx];
     return out;
 }
 
 struct Uniforms {
-    viewport: vec2<f32>,
-    camera_target: vec3<f32>,
-    camera_position: vec3<f32>,
+    /// Inversed projection matrix.
+    inv_proj: mat4x4<f32>,
+    /// Inversed view matrix.
+    inv_view: mat4x4<f32>,
 }
 
 @group(0) @binding(2) var<uniform> uniforms: Uniforms;
 
 // Number of antialiasing samples in each direction (total samples = aa_samples * aa_samples)
-const aa_samples: u32 = 4u;
+const aa_samples: u32 = 1u;
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
-    let viewport = uniforms.viewport;
-    let uv = in.uv * (viewport / viewport.y);
-
-    // Camera
-    let camera_position = uniforms.camera_position;
-    let camera_target = uniforms.camera_target;
-    let camera_up = vec3<f32>(0.0, 1.0, 0.0);
-    let focal_length: f32 = 2.5;
-
-    // Camera matrix
-    let ww = normalize(camera_target - camera_position);
-    let uu = normalize(cross(ww, camera_up));
-    let vv = normalize(cross(uu, ww));
-
     // Ray origin
-    let ray_origin = camera_position;
+    let ro_view = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    let ro_world = uniforms.inv_view * ro_view;
 
     var total_color = vec3<f32>(0.0);
 
-    for (var i = 0u; i < aa_samples; i++) {
-        for (var j = 0u; j < aa_samples; j++) {
-            // Anti-aliasing offset in pixel space (-0.5 to 0.5)
-            // - aa_samples = 1 -> [0.0]
-            // - aa_samples = 2 -> [-0.25, 0.25]
-            // - aa_samples = 3 -> [-0.333, 0.0, 0.333]
-            // - aa_samples = 4 -> [-0.375, -0.125, 0.125, 0.375]
-            // - etc.
-            let aa_pixel_offset = (vec2<f32>(f32(i), f32(j)) + 0.5) / f32(aa_samples) - 0.5;
+//    for (var i = 0u; i < aa_samples; i++) {
+//        for (var j = 0u; j < aa_samples; j++) {
+//            // TODO: Anti-aliasing offset in pixel space (-0.5 to 0.5)
 
-            // Anti-aliasing offset in UV space
-            let aa_uv_offset = aa_pixel_offset * 2.0 / viewport.y;
-
-            // UV with anti-aliasing offset
-            let aa_uv = uv + aa_uv_offset;
+            // Point on the image plane
+            let pt_screen = in.pt_screen;
+            let pt_ndc = vec4<f32>(pt_screen, -1.0, 1.0);
+            let pt_view = uniforms.inv_proj * pt_ndc;
+            let pt_world = uniforms.inv_view * pt_view;
 
             // Ray direction
-            let ray_direction = normalize(vec3(aa_uv.x * uu + aa_uv.y * vv + focal_length * ww));
+            let rd_world = normalize(pt_world - ro_world);
 
-            // Ray march
-            var color = ray_march(ray_origin, ray_direction);
+            // March the ray through the scene
+            var color = ray_march(ro_world.xyz, rd_world.xyz);
 
             // Gamma
             color = sqrt(color);
             total_color += color;
-        }
-    }
+//        }
+//    }
 
     total_color /= f32(aa_samples * aa_samples);
 
