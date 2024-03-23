@@ -1,15 +1,39 @@
+use std::f32::consts::FRAC_PI_4;
+
 use eframe::egui::PaintCallbackInfo;
 use eframe::egui_wgpu::{CallbackResources, CallbackTrait, RenderState};
+use encase::internal::WriteInto;
+use encase::{ShaderType, UniformBuffer};
+use nalgebra::{Matrix4, Perspective3, Vector2};
 use wgpu::util::DeviceExt;
 use wgpu::{
     CommandBuffer, CommandEncoder, Device, PrimitiveState, PrimitiveTopology, Queue, RenderPass,
 };
 
+use crate::camera::Camera;
 use crate::ray_marching::csg::builder::CSGCommandBufferBuilder;
 use crate::ray_marching::csg::{BuildCommands, CSGNode};
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+trait AsShaderBytes {
+    fn as_shader_bytes(&self) -> Box<[u8]>;
+}
+
+impl<T: ShaderType + WriteInto> AsShaderBytes for T {
+    fn as_shader_bytes(&self) -> Box<[u8]> {
+        let mut buffer = UniformBuffer::new(Vec::new());
+        buffer.write(self).unwrap();
+        buffer.into_inner().into_boxed_slice()
+    }
+}
+
+#[derive(Debug, Default, Copy, Clone, ShaderType)]
+struct Uniforms {
+    viewport_extent: Vector2<f32>,
+    inv_proj: Matrix4<f32>,
+    inv_view: Matrix4<f32>,
+}
+
+#[derive(Debug, Copy, Clone, ShaderType)]
 struct RayMarchLimits {
     min_dist: f32,
     max_dist: f32,
@@ -21,7 +45,7 @@ pub struct RayMarchingResources {
     bind_group: wgpu::BindGroup,
 
     cmd_buffer: wgpu::Buffer,
-    viewport_buffer: wgpu::Buffer,
+    uniforms_buffer: wgpu::Buffer,
 }
 
 impl RayMarchingResources {
@@ -97,20 +121,21 @@ impl RayMarchingResources {
             multiview: None,
         });
 
-        let viewport_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let uniforms_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("viewport"),
-            contents: bytemuck::cast_slice(&[512.0, 512.0]),
+            contents: &Uniforms::default().as_shader_bytes(),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
         let ray_march_limits_buffer =
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("ray_march_limits"),
-                contents: bytemuck::cast_slice(&[RayMarchLimits {
+                contents: &RayMarchLimits {
                     min_dist: 0.01,
                     max_dist: 100.0,
                     max_iter: 100,
-                }]),
+                }
+                .as_shader_bytes(),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
 
@@ -135,7 +160,7 @@ impl RayMarchingResources {
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: viewport_buffer.as_entire_binding(),
+                    resource: uniforms_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -144,7 +169,7 @@ impl RayMarchingResources {
             pipeline,
             bind_group,
             cmd_buffer,
-            viewport_buffer,
+            uniforms_buffer,
         }
     }
 }
@@ -153,14 +178,16 @@ pub struct RayMarchingCallback {
     time: f32,
     csg_node: Option<CSGNode>,
     viewport: [f32; 2],
+    camera: Camera,
 }
 
 impl RayMarchingCallback {
-    pub fn new(time: f32, csg_node: Option<CSGNode>, viewport: [f32; 2]) -> Self {
+    pub fn new(time: f32, csg_node: Option<CSGNode>, viewport: [f32; 2], camera: Camera) -> Self {
         Self {
             time,
             csg_node,
             viewport,
+            camera,
         }
     }
 }
@@ -168,17 +195,30 @@ impl RayMarchingCallback {
 impl CallbackTrait for RayMarchingCallback {
     fn prepare(
         &self,
-        device: &Device,
+        _device: &Device,
         queue: &Queue,
-        egui_encoder: &mut CommandEncoder,
+        _egui_encoder: &mut CommandEncoder,
         callback_resources: &mut CallbackResources,
     ) -> Vec<CommandBuffer> {
         let resources: &RayMarchingResources = callback_resources.get().unwrap();
 
+        // TODO: Make projection configurable
+        let projection =
+            Perspective3::new(self.viewport[0] / self.viewport[1], FRAC_PI_4, 1.0, 10000.0);
+
+        let viewport_extent = Vector2::new(self.viewport[0], self.viewport[1]);
+        let inv_proj = projection.inverse();
+        let inv_view = self.camera.view().inverse().to_homogeneous();
+
         queue.write_buffer(
-            &resources.viewport_buffer,
+            &resources.uniforms_buffer,
             0,
-            bytemuck::cast_slice(&self.viewport),
+            &Uniforms {
+                viewport_extent,
+                inv_proj,
+                inv_view,
+            }
+            .as_shader_bytes(),
         );
 
         let mut builder = CSGCommandBufferBuilder::new();

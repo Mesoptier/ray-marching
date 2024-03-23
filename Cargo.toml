@@ -12,5 +12,7 @@ debug = true
 bytemuck = "1.14"
 eframe = { version = "0.24", features = ["wgpu"] }
 egui_node_graph = { git = "https://github.com/SergioRibera/egui_node_graph.git", version = "0.4.0", rev = "b315264d9f92417082b090cd1985135d65bad893" }
+encase = { version = "0.7.0", features = ["nalgebra"] }
 enum_dispatch = "0.3.12"
+nalgebra = "0.32.4"
 wgpu = "0.18"
