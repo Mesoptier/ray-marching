@@ -208,6 +208,9 @@ fn eval_cmd(cmd_type: u32, pos: vec3<f32>) -> f32 {
         case 0u: {
             return eval_cmd_sphere(pos);
         }
+        case 1u: {
+            return eval_cmd_box(pos);
+        }
 
         // Binary operations
         case 100u: {
@@ -227,6 +230,13 @@ fn eval_cmd_sphere(pos: vec3<f32>) -> f32 {
     let center = csg_pop_vec3();
     let radius = csg_pop_f32();
     return length(pos - center) - radius;
+}
+
+fn eval_cmd_box(pos: vec3<f32>) -> f32 {
+    let center = csg_pop_vec3();
+    let radius = csg_pop_vec3();
+    let q = abs(pos - center) - radius;
+    return length(max(q, vec3(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0);
 }
 
 fn eval_cmd_union() -> f32 {

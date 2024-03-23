@@ -30,7 +30,7 @@ pub trait CSGNodeTemplateTrait {
 pub enum CSGNode {
     // Primitives
     Sphere,
-    // Box,
+    Box,
     // Plane,
 
     // Binary operators
@@ -48,6 +48,7 @@ pub enum CSGNode {
 #[derive(Debug, Clone)]
 pub enum CSGNodeTemplate {
     Sphere(SphereTemplate),
+    Box(BoxTemplate),
     Union(UnionTemplate),
     Subtraction(SubtractionTemplate),
 }
@@ -56,6 +57,7 @@ impl CSGNodeTemplate {
     pub fn all() -> impl IntoIterator<Item = Self> {
         [
             CSGNodeTemplate::Sphere(SphereTemplate),
+            CSGNodeTemplate::Box(BoxTemplate),
             CSGNodeTemplate::Union(UnionTemplate),
             CSGNodeTemplate::Subtraction(SubtractionTemplate),
         ]

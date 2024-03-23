@@ -4,7 +4,7 @@ pub enum CSGCommandType {
     // Primitives
     // (0 children, no space transform)
     Sphere = 0,
-    // Box,
+    Box,
     // Plane,
 
     // Binary operators
