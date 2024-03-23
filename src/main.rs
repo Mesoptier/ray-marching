@@ -53,9 +53,9 @@ impl eframe::App for RayMarchingApp {
                 let (rect, response) =
                     ui.allocate_exact_size(ui.available_size(), egui::Sense::drag());
 
+                let modifiers = ctx.input(|input_state| input_state.modifiers);
+                let delta = response.drag_delta().into();
                 if response.dragged_by(egui::PointerButton::Primary) {
-                    let modifiers = ctx.input(|input_state| input_state.modifiers);
-                    let delta = response.drag_delta().into();
                     if modifiers.ctrl {
                         self.camera_controller
                             .update(camera::OrbitCameraControllerEvent::Pan(delta));
@@ -63,6 +63,9 @@ impl eframe::App for RayMarchingApp {
                         self.camera_controller
                             .update(camera::OrbitCameraControllerEvent::Orbit(delta));
                     }
+                } else if response.dragged_by(egui::PointerButton::Middle) {
+                    self.camera_controller
+                        .update(camera::OrbitCameraControllerEvent::Dolly(delta[1]));
                 }
 
                 ui.painter().add(egui_wgpu::Callback::new_paint_callback(

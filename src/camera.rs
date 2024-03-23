@@ -8,7 +8,7 @@ pub(crate) struct Camera {
 pub(crate) enum OrbitCameraControllerEvent {
     Pan([f32; 2]),
     Orbit([f32; 2]),
-    // Dolly(f32),
+    Dolly(f32),
 }
 
 pub(crate) struct OrbitCameraController {
@@ -19,24 +19,26 @@ pub(crate) struct OrbitCameraController {
     /// Yaw angle in radians.
     yaw: f32,
     /// Distance from the target.
-    distance: f32,
+    radius: f32,
 
     pan_speed: f32,
     yaw_speed: f32,
     pitch_speed: f32,
+    dolly_speed: f32,
 }
 
 impl OrbitCameraController {
-    pub(crate) fn new(target: [f32; 3], distance: f32) -> Self {
+    pub(crate) fn new(target: [f32; 3], radius: f32) -> Self {
         Self {
             target: Point3::from(target),
             pitch: 0.0,
             yaw: 0.0,
-            distance,
+            radius,
 
             pan_speed: 0.01,
             yaw_speed: 0.01,
             pitch_speed: 0.01,
+            dolly_speed: 0.01,
         }
     }
 
@@ -45,7 +47,7 @@ impl OrbitCameraController {
     }
 
     pub(crate) fn camera(&self) -> Camera {
-        let position = self.target + self.rotation() * Vector3::z() * self.distance;
+        let position = self.target + self.rotation() * Vector3::z() * self.radius;
         Camera {
             target: self.target,
             position,
@@ -68,6 +70,10 @@ impl OrbitCameraController {
                 // Clamping to value slightly less than pi/2 to avoid gimbal lock.
                 // TODO: Fix shader to support quaternion rotation.
                 self.pitch = self.pitch.clamp(-1.5, 1.5);
+            }
+            OrbitCameraControllerEvent::Dolly(delta) => {
+                self.radius += delta * self.dolly_speed * self.radius;
+                self.radius = self.radius.max(0.1);
             }
         }
     }
