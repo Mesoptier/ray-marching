@@ -2,7 +2,7 @@ use eframe::egui::PaintCallbackInfo;
 use eframe::egui_wgpu::{CallbackResources, CallbackTrait, RenderState};
 use encase::internal::WriteInto;
 use encase::{ShaderType, UniformBuffer};
-use mint::{Vector2, Vector3};
+use nalgebra::{Vector2, Vector3};
 use wgpu::util::DeviceExt;
 use wgpu::{
     CommandBuffer, CommandEncoder, Device, PrimitiveState, PrimitiveTopology, Queue, RenderPass,
@@ -24,29 +24,11 @@ impl<T: ShaderType + WriteInto> AsShaderBytes for T {
     }
 }
 
-#[derive(Debug, Copy, Clone, ShaderType)]
+#[derive(Debug, Default, Copy, Clone, ShaderType)]
 struct Uniforms {
     viewport: Vector2<f32>,
     camera_target: Vector3<f32>,
     camera_position: Vector3<f32>,
-}
-
-impl Default for Uniforms {
-    fn default() -> Self {
-        Self {
-            viewport: Vector2 { x: 0.0, y: 0.0 },
-            camera_target: Vector3 {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            camera_position: Vector3 {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-        }
-    }
 }
 
 #[derive(Debug, Copy, Clone, ShaderType)]
@@ -218,16 +200,13 @@ impl CallbackTrait for RayMarchingCallback {
     ) -> Vec<CommandBuffer> {
         let resources: &RayMarchingResources = callback_resources.get().unwrap();
 
-        let viewport = self.viewport;
-        let camera_target = self.camera.target;
-        let camera_position = self.camera.position;
         queue.write_buffer(
             &resources.uniforms_buffer,
             0,
             &Uniforms {
-                viewport: viewport.into(),
-                camera_target: camera_target.into(),
-                camera_position: camera_position.into(),
+                viewport: self.viewport.into(),
+                camera_target: self.camera.target.coords,
+                camera_position: self.camera.position.coords,
             }
             .as_shader_bytes(),
         );
