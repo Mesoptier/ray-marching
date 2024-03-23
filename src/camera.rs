@@ -5,13 +5,13 @@ pub(crate) struct Camera {
     pub position: [f32; 3],
 }
 
-pub(crate) enum CameraControllerEvent {
+pub(crate) enum OrbitCameraControllerEvent {
     Pan([f32; 2]),
     Orbit([f32; 2]),
     // Zoom(f32),
 }
 
-pub(crate) struct CameraController {
+pub(crate) struct OrbitCameraController {
     /// Target to look at.
     target: [f32; 3],
     /// Pitch angle in radians.
@@ -25,9 +25,9 @@ pub(crate) struct CameraController {
     pitch_speed: f32,
 }
 
-impl CameraController {
-    pub(crate) fn new(target: [f32; 3], distance: f32) -> CameraController {
-        CameraController {
+impl OrbitCameraController {
+    pub(crate) fn new(target: [f32; 3], distance: f32) -> Self {
+        Self {
             target,
             pitch: 0.0,
             yaw: 0.0,
@@ -50,9 +50,9 @@ impl CameraController {
         }
     }
 
-    pub(crate) fn update(&mut self, event: CameraControllerEvent) {
+    pub(crate) fn update(&mut self, event: OrbitCameraControllerEvent) {
         match event {
-            CameraControllerEvent::Pan([dx, dy]) => {
+            OrbitCameraControllerEvent::Pan([dx, dy]) => {
                 let forward = [
                     self.yaw.cos() * self.pitch.cos(),
                     self.pitch.sin(),
@@ -63,7 +63,7 @@ impl CameraController {
                 self.target[1] += forward[1] * dy - right[1] * dx;
                 self.target[2] += forward[2] * dy - right[2] * dx;
             }
-            CameraControllerEvent::Orbit([dx, dy]) => {
+            OrbitCameraControllerEvent::Orbit([dx, dy]) => {
                 self.yaw += dx * self.yaw_speed;
                 self.pitch += dy * self.pitch_speed;
                 self.pitch = self.pitch.clamp(-FRAC_PI_2, FRAC_PI_2);

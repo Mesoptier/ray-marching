@@ -21,7 +21,7 @@ fn main() {
 
 struct RayMarchingApp {
     csg_node_graph: csg_node_graph::CSGNodeGraph,
-    camera_controller: camera::CameraController,
+    camera_controller: camera::OrbitCameraController,
 }
 
 impl RayMarchingApp {
@@ -35,7 +35,7 @@ impl RayMarchingApp {
 
         Self {
             csg_node_graph: csg_node_graph::CSGNodeGraph::default(),
-            camera_controller: camera::CameraController::new([0.0, 0.0, 0.0], 5.0),
+            camera_controller: camera::OrbitCameraController::new([0.0, 0.0, 0.0], 5.0),
         }
     }
 }
@@ -58,10 +58,10 @@ impl eframe::App for RayMarchingApp {
                     let delta = response.drag_delta().into();
                     if modifiers.ctrl {
                         self.camera_controller
-                            .update(camera::CameraControllerEvent::Pan(delta));
+                            .update(camera::OrbitCameraControllerEvent::Pan(delta));
                     } else {
                         self.camera_controller
-                            .update(camera::CameraControllerEvent::Orbit(delta));
+                            .update(camera::OrbitCameraControllerEvent::Orbit(delta));
                     }
                 }
 
